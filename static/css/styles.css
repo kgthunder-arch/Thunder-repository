@@ -125,6 +125,10 @@ body {
     color: rgba(24, 34, 24, 0.72);
 }
 
+.supporting-text {
+    max-width: 42rem;
+}
+
 .hero-text {
     color: rgba(248, 246, 240, 0.82);
     max-width: 640px;
@@ -178,6 +182,11 @@ body {
     align-items: flex-start;
 }
 
+.panel-header > *,
+.result-header > * {
+    min-width: 0;
+}
+
 .panel-header h2,
 .result-header h2 {
     font-size: clamp(1.8rem, 3.2vw, 2.6rem);
@@ -209,6 +218,7 @@ body {
     border-radius: 22px;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(243, 239, 230, 0.7));
     border: 1px solid rgba(79, 52, 34, 0.09);
+    min-width: 0;
 }
 
 .feature-card {
@@ -277,8 +287,7 @@ body {
 input[type="file"],
 input[type="number"],
 input[type="range"],
-select,
-button {
+select {
     width: 100%;
 }
 
@@ -368,6 +377,8 @@ fieldset {
     color: #f9faf7;
     cursor: pointer;
     box-shadow: 0 16px 30px rgba(53, 94, 59, 0.22);
+    width: auto;
+    max-width: 100%;
 }
 
 .stats-row {
@@ -438,20 +449,47 @@ fieldset {
 .chart-card .js-plotly-plot {
     width: 100% !important;
     max-width: 100% !important;
+    min-width: 0 !important;
 }
 
-.chart-card svg,
-.table-shell table {
-    max-width: 100%;
+.chart-card .svg-container,
+.chart-card .plot-container {
+    width: 100% !important;
+    max-width: 100% !important;
 }
 
 .chart-grid,
 .table-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
 }
 
 .full-width-card {
     width: 100%;
+}
+
+@media (min-width: 1100px) {
+    .page-shell {
+        width: min(1280px, calc(100% - 48px));
+    }
+
+    .feature-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .source-grid,
+    .toggle-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .chart-grid,
+    .table-grid {
+        grid-template-columns: repeat(2, minmax(320px, 1fr));
+    }
+
+    .feature-checklist {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
 }
 
 @media (max-width: 920px) {
