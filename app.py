@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 from flask import Flask, flash, redirect, render_template, request, url_for
 from sklearn.compose import ColumnTransformer
@@ -183,22 +182,26 @@ def calculate_cv_summary(
 
 
 def create_metrics_chart(metrics_df: pd.DataFrame, forecast_label: str) -> str:
-    melted = metrics_df.melt(
-        id_vars=["Model"],
-        value_vars=["MAE", "RMSE", "R2"],
-        var_name="Metric",
-        value_name="Value",
-    )
-    figure = px.bar(
-        melted,
-        x="Model",
-        y="Value",
-        color="Metric",
-        barmode="group",
-        title=f"{forecast_label} Model Comparison",
-        color_discrete_sequence=["#5f8d4e", "#a4be7b", "#285430"],
-    )
+    figure = go.Figure()
+    metric_styles = {
+        "MAE": "#5f8d4e",
+        "RMSE": "#a4be7b",
+        "R2": "#285430",
+    }
+
+    for metric_name, color in metric_styles.items():
+        figure.add_trace(
+            go.Bar(
+                x=metrics_df["Model"],
+                y=metrics_df[metric_name],
+                name=metric_name,
+                marker_color=color,
+            )
+        )
+
     figure.update_layout(
+        title=f"{forecast_label} Model Comparison",
+        barmode="group",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=20, r=20, t=60, b=20),
@@ -240,15 +243,21 @@ def create_prediction_chart(prediction_df: pd.DataFrame, forecast_label: str, mo
 
 
 def create_scatter_chart(prediction_df: pd.DataFrame, forecast_label: str, model_name: str) -> str:
-    figure = px.scatter(
-        prediction_df,
-        x="Actual",
-        y="Predicted",
-        trendline="ols",
-        title=f"{forecast_label} Accuracy Scatter ({model_name})",
-        color_discrete_sequence=["#bc4749"],
+    figure = go.Figure(
+        data=[
+            go.Scatter(
+                x=prediction_df["Actual"],
+                y=prediction_df["Predicted"],
+                mode="markers",
+                marker=dict(color="#bc4749", size=10, opacity=0.82),
+                name="Prediction",
+            )
+        ]
     )
     figure.update_layout(
+        title=f"{forecast_label} Accuracy Scatter ({model_name})",
+        xaxis_title="Actual",
+        yaxis_title="Predicted",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=20, r=20, t=60, b=20),
