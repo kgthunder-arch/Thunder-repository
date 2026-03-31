@@ -624,8 +624,9 @@ fieldset {
 
 @media (max-width: 640px) {
     .page-shell {
-        width: min(100% - 18px, 100%);
-        margin-top: 12px;
+        width: 100%;
+        max-width: 100%;
+        margin-top: 0;
         margin-bottom: 28px;
     }
 
@@ -639,24 +640,33 @@ fieldset {
         max-width: 100vw;
         margin-left: calc(50% - 50vw);
         margin-right: calc(50% - 50vw);
-        min-height: 72svh;
-        padding-top: 22px;
-        padding-bottom: 28px;
+        min-height: 92svh;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding-top: 24px;
+        padding-bottom: 34px;
         border-radius: 0 0 24px 24px;
     }
 
     .hero-copy {
         max-width: none;
-        min-height: 100%;
+        flex: 1 1 auto;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        gap: 18px;
-        padding-top: 28px;
+        gap: 22px;
+        padding-top: 40px;
     }
 
     .hero-text {
         max-width: none;
+        font-size: 1.08rem;
+        line-height: 1.8;
+    }
+
+    .hero-band {
+        margin-top: auto;
     }
 
     .hero-shell::after {
@@ -716,8 +726,9 @@ fieldset {
 
 @media (max-width: 480px) {
     .page-shell {
-        width: calc(100% - 12px);
-        margin-top: 8px;
+        width: 100%;
+        max-width: 100%;
+        margin-top: 0;
     }
 
     .hero-shell,
@@ -731,12 +742,17 @@ fieldset {
         max-width: 100vw;
         margin-left: calc(50% - 50vw);
         margin-right: calc(50% - 50vw);
-        min-height: 70svh;
-        padding-top: 20px;
-        padding-bottom: 24px;
+        min-height: 100svh;
+        padding-top: 22px;
+        padding-bottom: 30px;
         padding-left: 18px;
         padding-right: 18px;
         border-radius: 0 0 22px 22px;
+    }
+
+    .hero-copy {
+        gap: 20px;
+        padding-top: 34px;
     }
 
     .brand-row,
