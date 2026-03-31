@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+    <div class="panel-header">
+        <div>
+            <p class="section-kicker">Configuration</p>
+            <h2>Prepare {{ summary.filename }} for forecasting</h2>
+        </div>
+        <p class="supporting-text">Map your targets, choose the predictor columns, and set the validation strategy.</p>
+    </div>
+
+    <div class="stats-row">
+        <div class="stat-card">
+            <strong>{{ summary.row_count }}</strong>
+            <span>Rows</span>
+        </div>
+        <div class="stat-card">
+            <strong>{{ summary.column_count }}</strong>
+            <span>Columns</span>
+        </div>
+        <div class="stat-card">
+            <strong>{{ summary.numeric_columns|length }}</strong>
+            <span>Numeric Fields</span>
+        </div>
+    </div>
+</section>
+
+<section class="panel config-panel">
+    <form action="{{ url_for('analyze') }}" method="post" class="config-form">
+        <input type="hidden" name="dataset_path" value="{{ summary.path }}">
+        <input type="hidden" name="filename" value="{{ summary.filename }}">
+
+        <div class="config-grid">
+            <div class="form-group">
+                <label for="yield_target">Crop Yield Target</label>
+                <select id="yield_target" name="yield_target">
+                    <option value="">Not used</option>
+                    {% for column in summary.columns %}
+                        <option value="{{ column }}" {% if summary.suggestions["yield"] == column %}selected{% endif %}>{{ column }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="price_target">Market Price Target</label>
+                <select id="price_target" name="price_target">
+                    <option value="">Not used</option>
+                    {% for column in summary.columns %}
+                        <option value="{{ column }}" {% if summary.suggestions["price"] == column %}selected{% endif %}>{{ column }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="demand_target">Demand Target</label>
+                <select id="demand_target" name="demand_target">
+                    <option value="">Not used</option>
+                    {% for column in summary.columns %}
+                        <option value="{{ column }}" {% if summary.suggestions["demand"] == column %}selected{% endif %}>{{ column }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="random_state">Random State</label>
+                <input id="random_state" name="random_state" type="number" value="42" min="1">
+            </div>
+            <div class="form-group wide-group">
+                <label for="feature_columns">Feature Columns</label>
+                <select id="feature_columns" name="feature_columns" multiple size="10">
+                    {% for column in summary.columns %}
+                        {% if column not in [summary.suggestions["yield"], summary.suggestions["price"], summary.suggestions["demand"]] %}
+                            <option value="{{ column }}" selected>{{ column }}</option>
+                        {% else %}
+                            <option value="{{ column }}">{{ column }}</option>
+                        {% endif %}
+                    {% endfor %}
+                </select>
+                <small>Use Ctrl/Cmd + click to adjust selection. Target columns should usually stay unselected here.</small>
+            </div>
+        </div>
+
+        <div class="toggle-row">
+            <label class="toggle-card">
+                <input type="checkbox" name="use_holdout" checked>
+                <div>
+                    <strong>Train-Test Split</strong>
+                    <p>Evaluate models on an unseen holdout sample.</p>
+                </div>
+            </label>
+            <label class="toggle-card">
+                <input type="checkbox" name="use_cv" checked>
+                <div>
+                    <strong>Cross-Validation</strong>
+                    <p>Measure model consistency across multiple folds.</p>
+                </div>
+            </label>
+        </div>
+
+        <div class="config-grid compact-grid">
+            <div class="form-group">
+                <label for="test_size">Test Size <span id="test-size-value">20%</span></label>
+                <input id="test_size" name="test_size" type="range" min="0.2" max="0.4" step="0.05" value="0.2">
+            </div>
+            <div class="form-group">
+                <label for="cv_folds">CV Folds</label>
+                <input id="cv_folds" name="cv_folds" type="number" min="3" max="10" value="5">
+            </div>
+        </div>
+
+        <button class="primary-button" type="submit">Run Predictive Analysis</button>
+    </form>
+</section>
+
+<section class="panel sample-panel">
+    <div class="panel-header">
+        <div>
+            <p class="section-kicker">Preview</p>
+            <h2>Dataset head</h2>
+        </div>
+        <p class="supporting-text">Use this preview to confirm your column naming before training the models.</p>
+    </div>
+    <div class="table-shell">
+        {{ summary.preview_html|safe }}
+    </div>
+</section>
+{% endblock %}

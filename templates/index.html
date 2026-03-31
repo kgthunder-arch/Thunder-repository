@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel overview-panel">
+    <div class="panel-header">
+        <div>
+            <p class="section-kicker">Workflow</p>
+            <h2>Model agribusiness outcomes in four steps</h2>
+        </div>
+        <p class="supporting-text">Upload data, select targets, compare regression and tree models, then review the best-performing forecast.</p>
+    </div>
+    <div class="feature-grid">
+        <article class="feature-card">
+            <span>01</span>
+            <h3>Upload Data</h3>
+            <p>Bring in CSV or Excel files with historical yields, prices, weather, and market signals.</p>
+        </article>
+        <article class="feature-card">
+            <span>02</span>
+            <h3>Train Models</h3>
+            <p>Run Linear Regression, Decision Tree, and Random Forest with configurable split and validation settings.</p>
+        </article>
+        <article class="feature-card">
+            <span>03</span>
+            <h3>Review Metrics</h3>
+            <p>Compare MAE, RMSE, and R2 across forecast types with charts and evaluation tables.</p>
+        </article>
+        <article class="feature-card">
+            <span>04</span>
+            <h3>Recommend Action</h3>
+            <p>Identify the most reliable model for crop yield, price, or demand forecasting.</p>
+        </article>
+    </div>
+</section>
+
+<section class="panel form-panel">
+    <div class="panel-header">
+        <div>
+            <p class="section-kicker">Data Source</p>
+            <h2>Start a new forecast analysis</h2>
+        </div>
+        <p class="supporting-text">Use the included sample dataset for a fast demo or upload your own agribusiness file.</p>
+    </div>
+
+    <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data" class="upload-form">
+        <div class="source-grid">
+            <label class="source-card selected-card">
+                <input type="radio" name="source" value="sample" checked>
+                <div>
+                    <strong>Use Sample Dataset</strong>
+                    <p>{{ sample_summary.filename }} with {{ sample_summary.row_count }} rows and {{ sample_summary.column_count }} columns.</p>
+                </div>
+            </label>
+            <label class="source-card">
+                <input type="radio" name="source" value="upload">
+                <div>
+                    <strong>Upload Custom Dataset</strong>
+                    <p>CSV, XLSX, or XLS files containing agricultural production, weather, and market attributes.</p>
+                </div>
+            </label>
+        </div>
+
+        <label class="file-picker">
+            <span>Dataset file</span>
+            <input type="file" name="dataset" accept=".csv,.xlsx,.xls">
+            <small id="file-name">No custom file selected.</small>
+        </label>
+
+        <button class="primary-button" type="submit">Continue to Configuration</button>
+    </form>
+</section>
+
+<section class="panel sample-panel">
+    <div class="panel-header">
+        <div>
+            <p class="section-kicker">Sample Preview</p>
+            <h2>Included agribusiness training data</h2>
+        </div>
+        <p class="supporting-text">The sample file already includes target columns for crop yield, market price, and demand.</p>
+    </div>
+    <div class="stats-row">
+        <div class="stat-card">
+            <strong>{{ sample_summary.row_count }}</strong>
+            <span>Rows</span>
+        </div>
+        <div class="stat-card">
+            <strong>{{ sample_summary.column_count }}</strong>
+            <span>Columns</span>
+        </div>
+        <div class="stat-card">
+            <strong>{{ sample_summary.numeric_columns|length }}</strong>
+            <span>Numeric Fields</span>
+        </div>
+    </div>
+    <div class="table-shell">
+        {{ sample_summary.preview_html|safe }}
+    </div>
+</section>
+{% endblock %}

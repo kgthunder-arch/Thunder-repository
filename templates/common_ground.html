@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Common Ground | Global Unity and Innovation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='common-ground/styles.css') }}">
+</head>
+<body>
+  <div class="aurora aurora-left"></div>
+  <div class="aurora aurora-right"></div>
+  <div class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="#home" aria-label="Common Ground home">
+        <span class="brand-mark">CG</span>
+        <span class="brand-copy">
+          <strong>Common Ground</strong>
+          <small>Global unity through shared work</small>
+        </span>
+      </a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="#experience">Experience</a>
+        <a href="#forums">Forums</a>
+        <a href="#impact">Impact</a>
+        <a href="{{ url_for('agribusiness_index') }}">Agribusiness Demo</a>
+      </nav>
+      <button class="ghost-button" type="button">Join the beta</button>
+    </header>
+    <main id="home">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Global community platform</p>
+          <h1>Where cultures meet, ideas travel, and collaboration feels effortless.</h1>
+          <p class="hero-text">
+            Common Ground is a digital hub for cultural exchange, professional networking,
+            and real-time collaboration. It helps people connect across languages, time zones,
+            and disciplines without losing the human spark.
+          </p>
+          <div class="hero-actions">
+            <a class="primary-button" href="#experience">Explore the experience</a>
+            <a class="secondary-button" href="#forums">See active forums</a>
+          </div>
+          <div class="hero-stats" aria-label="Platform highlights">
+            <article>
+              <strong>128</strong>
+              <span>live cross-border rooms</span>
+            </article>
+            <article>
+              <strong>46</strong>
+              <span>languages translated in real time</span>
+            </article>
+            <article>
+              <strong>92%</strong>
+              <span>match relevance in pilot sessions</span>
+            </article>
+          </div>
+        </div>
+        <div class="hero-visual">
+          <div class="visual-card globe-card">
+            <div class="card-label">
+              <span>World Pulse</span>
+              <strong>Live collaboration atlas</strong>
+            </div>
+            <div class="signal-map" id="signalMap" aria-hidden="true"></div>
+            <div class="world-strip">
+              <span>Design sprint in Lagos</span>
+              <span>Climate forum in Santiago</span>
+              <span>Mentor office hours in Seoul</span>
+            </div>
+          </div>
+          <div class="visual-card activity-card">
+            <div class="card-label">
+              <span>Activity Stream</span>
+              <strong>Ideas moving right now</strong>
+            </div>
+            <div class="ticker" id="ticker" aria-live="polite"></div>
+          </div>
+        </div>
+      </section>
+      <section class="experience" id="experience">
+        <div class="section-heading">
+          <p class="eyebrow">Product experience</p>
+          <h2>One platform, four tightly connected experiences.</h2>
+          <p>
+            Users can discover communities, translate conversations, get matched with the right
+            people, and move instantly into a shared workspace without switching tools.
+          </p>
+        </div>
+        <div class="experience-controls" role="tablist" aria-label="Experience views">
+          <button class="tab-button is-active" type="button" data-panel="discover" aria-selected="true">Discover</button>
+          <button class="tab-button" type="button" data-panel="translate" aria-selected="false">Translate</button>
+          <button class="tab-button" type="button" data-panel="match" aria-selected="false">AI Match</button>
+          <button class="tab-button" type="button" data-panel="collaborate" aria-selected="false">Collaborate</button>
+        </div>
+        <div class="experience-shell">
+          <aside class="command-rail">
+            <article class="rail-card">
+              <span>Active regions</span>
+              <strong>32</strong>
+              <p>Regional communities shaping shared projects this week.</p>
+            </article>
+            <article class="rail-card">
+              <span>Async handoffs</span>
+              <strong>640</strong>
+              <p>Summaries generated for teams across non-overlapping time zones.</p>
+            </article>
+            <article class="rail-card">
+              <span>Trust signals</span>
+              <strong>Context cards</strong>
+              <p>Etiquette, holidays, and communication norms appear when helpful.</p>
+            </article>
+          </aside>
+          <section class="panel-stage" id="panelStage" aria-live="polite"></section>
+        </div>
+      </section>
+      <section class="forums" id="forums">
+        <div class="section-heading">
+          <p class="eyebrow">Inclusive conversations</p>
+          <h2>Forums designed for depth, perspective, and real local insight.</h2>
+          <p>
+            Instead of endless comment feeds, Common Ground organizes knowledge into guided
+            prompts, regional case studies, and discussion formats that reward clarity and curiosity.
+          </p>
+        </div>
+        <div class="forum-toolbar">
+          <div class="chip-group" role="tablist" aria-label="Forum categories">
+            <button class="chip is-active" type="button" data-filter="all">All</button>
+            <button class="chip" type="button" data-filter="innovation">Innovation</button>
+            <button class="chip" type="button" data-filter="culture">Culture</button>
+            <button class="chip" type="button" data-filter="climate">Climate</button>
+            <button class="chip" type="button" data-filter="education">Education</button>
+          </div>
+        </div>
+        <div class="forum-grid" id="forumGrid"></div>
+      </section>
+      <section class="impact" id="impact">
+        <div class="impact-copy">
+          <p class="eyebrow">Why it works</p>
+          <h2>Built to reduce friction and increase serendipity.</h2>
+          <p>
+            The product treats language, time zone differences, and cultural context as design inputs,
+            not user problems. That makes international collaboration feel natural from the very first tap.
+          </p>
+        </div>
+        <div class="impact-grid">
+          <article class="impact-card">
+            <h3>Communication</h3>
+            <p>Inline translation, live captions, and one-tap summaries make every room more accessible.</p>
+          </article>
+          <article class="impact-card">
+            <h3>Belonging</h3>
+            <p>Profiles highlight identity, goals, causes, and curiosity, not just job titles and resumes.</p>
+          </article>
+          <article class="impact-card">
+            <h3>Momentum</h3>
+            <p>Every great conversation can turn into a workspace, brief, roadmap, and follow-up task list.</p>
+          </article>
+        </div>
+      </section>
+      <section class="cta">
+        <div>
+          <p class="eyebrow">Next step</p>
+          <h2>Launch a platform that feels like global citizenship in motion.</h2>
+        </div>
+        <div class="cta-actions">
+          <button class="primary-button" type="button">Request product walkthrough</button>
+          <button class="secondary-button" type="button">Download concept brief</button>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="{{ url_for('static', filename='common-ground/app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+    <div class="panel-header">
+        <div>
+            <p class="section-kicker">Results</p>
+            <h2>Forecast output for {{ filename }}</h2>
+        </div>
+        <p class="supporting-text">
+            {{ results|length }} forecast tracks analyzed using {{ feature_columns|length }} feature columns.
+            {% if use_holdout %}Holdout testing enabled.{% else %}Full-dataset evaluation enabled.{% endif %}
+            {% if use_cv %} Cross-validation enabled.{% endif %}
+        </p>
+    </div>
+</section>
+
+{% for result in results %}
+<section class="panel result-panel">
+    <div class="result-header">
+        <div>
+            <p class="section-kicker">{{ result.target_column }}</p>
+            <h2>{{ result.forecast_label }}</h2>
+        </div>
+        <div class="recommendation-chip">{{ result.best_model }}</div>
+    </div>
+
+    <div class="insight-card">
+        <h3>Recommendation</h3>
+        <p>{{ result.recommendation }}</p>
+    </div>
+
+    <div class="chart-grid">
+        <div class="chart-card">
+            {{ result.metrics_chart|safe }}
+        </div>
+        <div class="chart-card">
+            {{ result.prediction_chart|safe }}
+        </div>
+    </div>
+
+    <div class="chart-card full-width-card">
+        {{ result.scatter_chart|safe }}
+    </div>
+
+    <div class="table-grid">
+        <div class="table-card">
+            <h3>Model Evaluation Table</h3>
+            <div class="table-shell">
+                {{ result.metrics_table|safe }}
+            </div>
+        </div>
+        <div class="table-card">
+            <h3>Best Model Forecast Table</h3>
+            <div class="table-shell">
+                {{ result.predictions_table|safe }}
+            </div>
+        </div>
+    </div>
+</section>
+{% endfor %}
+{% endblock %}

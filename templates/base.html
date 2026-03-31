@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Agribusiness Predictive Analysis</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+    <div class="page-shell">
+        <header class="hero-shell">
+            <div class="brand-row">
+                <div class="brand-pill">AgriCast Intelligence</div>
+                <div>
+                    <a href="{{ url_for('agribusiness_index') }}" class="nav-link">New Analysis</a>
+                </div>
+            </div>
+            <div class="hero-copy">
+                <p class="eyebrow">Agribusiness Predictive Analysis</p>
+                <h1>Turn agricultural history into yield, price, and demand decisions.</h1>
+                <p class="hero-text">
+                    Upload farm and market datasets, compare machine learning models, validate results,
+                    and surface recommendations your agribusiness team can act on quickly.
+                </p>
+            </div>
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <section class="flash-stack">
+                    {% for category, message in messages %}
+                        <div class="flash {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </section>
+            {% endif %}
+        {% endwith %}
+
+        <main class="content-shell">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
