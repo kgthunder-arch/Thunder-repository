@@ -582,6 +582,11 @@ fieldset {
         padding: 20px;
     }
 
+    .hero-shell {
+        width: calc(100% + 12px);
+        margin-inline: -6px;
+    }
+
     .hero-copy {
         padding-top: 28px;
     }
@@ -651,6 +656,11 @@ fieldset {
     .panel {
         padding: 16px;
         border-radius: 22px;
+    }
+
+    .hero-shell {
+        width: calc(100% + 16px);
+        margin-inline: -8px;
     }
 
     .brand-row,
