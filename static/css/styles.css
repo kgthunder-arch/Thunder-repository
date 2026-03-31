@@ -147,6 +147,13 @@ body {
     margin-top: 22px;
 }
 
+.page-footer {
+    padding: 10px 6px 0;
+    text-align: center;
+    color: rgba(24, 34, 24, 0.62);
+    font-size: 0.92rem;
+}
+
 .panel {
     background: var(--card);
     backdrop-filter: blur(14px);
