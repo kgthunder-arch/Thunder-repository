@@ -639,11 +639,24 @@ fieldset {
         max-width: 100vw;
         margin-left: calc(50% - 50vw);
         margin-right: calc(50% - 50vw);
+        min-height: 72svh;
+        padding-top: 22px;
+        padding-bottom: 28px;
         border-radius: 0 0 24px 24px;
     }
 
     .hero-copy {
+        max-width: none;
+        min-height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 18px;
         padding-top: 28px;
+    }
+
+    .hero-text {
+        max-width: none;
     }
 
     .hero-shell::after {
@@ -718,6 +731,9 @@ fieldset {
         max-width: 100vw;
         margin-left: calc(50% - 50vw);
         margin-right: calc(50% - 50vw);
+        min-height: 70svh;
+        padding-top: 20px;
+        padding-bottom: 24px;
         padding-left: 18px;
         padding-right: 18px;
         border-radius: 0 0 22px 22px;
