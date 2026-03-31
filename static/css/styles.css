@@ -18,7 +18,7 @@
 
 html,
 body {
-    overflow-x: hidden;
+    max-width: 100%;
 }
 
 body {
@@ -34,8 +34,8 @@ body {
 }
 
 .page-shell {
-    width: calc(100% - 32px);
-    max-width: 1180px;
+    width: min(1280px, calc(100% - 24px));
+    max-width: 1280px;
     margin: 24px auto 48px;
 }
 
@@ -127,6 +127,21 @@ body {
     color: rgba(24, 34, 24, 0.72);
 }
 
+.hero-copy h1,
+.panel-header h2,
+.result-header h2,
+.hero-text,
+.supporting-text,
+.feature-card h3,
+.feature-card p,
+.source-card strong,
+.source-card p,
+.toggle-card strong,
+.toggle-card p,
+.feature-option span {
+    overflow-wrap: anywhere;
+}
+
 .supporting-text {
     max-width: 42rem;
     flex: 1 1 280px;
@@ -184,7 +199,7 @@ body {
     justify-content: space-between;
     gap: 16px;
     align-items: flex-start;
-    flex-wrap: wrap;
+    flex-direction: column;
 }
 
 .panel-header > *,
@@ -194,7 +209,8 @@ body {
 
 .panel-header > div,
 .result-header > div:first-child {
-    flex: 1 1 420px;
+    flex: 1 1 auto;
+    max-width: 100%;
 }
 
 .panel-header h2,
@@ -214,7 +230,7 @@ body {
 }
 
 .feature-grid {
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+    grid-template-columns: 1fr;
     margin-top: 18px;
 }
 
@@ -261,7 +277,7 @@ body {
 
 .source-grid,
 .toggle-row {
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+    grid-template-columns: 1fr;
 }
 
 .source-card,
@@ -271,6 +287,16 @@ body {
     gap: 14px;
     cursor: pointer;
     align-items: flex-start;
+    min-width: 0;
+}
+
+.source-card > div,
+.toggle-card > div,
+.feature-card,
+.stat-card,
+.table-card,
+.chart-card,
+.insight-card {
     min-width: 0;
 }
 
@@ -337,7 +363,7 @@ fieldset {
 
 .feature-checklist {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+    grid-template-columns: 1fr;
     gap: 12px;
 }
 
@@ -470,12 +496,42 @@ fieldset {
 
 .chart-grid,
 .table-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     align-items: start;
 }
 
 .full-width-card {
     width: 100%;
+}
+
+@media (min-width: 700px) {
+    .feature-grid,
+    .feature-checklist,
+    .stats-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 900px) {
+    .source-grid,
+    .toggle-row,
+    .chart-grid,
+    .table-grid,
+    .compact-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .panel-header,
+    .result-header,
+    .brand-row {
+        flex-direction: row;
+        align-items: flex-start;
+    }
+
+    .panel-header > div,
+    .result-header > div:first-child {
+        flex: 1 1 0;
+    }
 }
 
 @media (min-width: 1100px) {
@@ -486,11 +542,6 @@ fieldset {
 
     .feature-grid {
         grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-
-    .source-grid,
-    .toggle-row {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .chart-grid,
@@ -504,12 +555,6 @@ fieldset {
 }
 
 @media (max-width: 1100px) {
-    .panel-header,
-    .result-header {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
     .panel-header > div,
     .result-header > div:first-child,
     .supporting-text {
@@ -520,17 +565,8 @@ fieldset {
 
 @media (max-width: 920px) {
     .config-grid,
-    .compact-grid,
-    .chart-grid,
-    .table-grid {
+    .compact-grid {
         grid-template-columns: 1fr;
-    }
-
-    .panel-header,
-    .result-header,
-    .brand-row {
-        flex-direction: column;
-        align-items: flex-start;
     }
 }
 
