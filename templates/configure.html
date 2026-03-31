@@ -63,19 +63,24 @@
                 <label for="random_state">Random State</label>
                 <input id="random_state" name="random_state" type="number" value="42" min="1">
             </div>
-            <div class="form-group wide-group">
-                <label for="feature_columns">Feature Columns</label>
-                <select id="feature_columns" name="feature_columns" multiple size="10">
+            <fieldset class="form-group wide-group feature-fieldset">
+                <legend>Feature Columns</legend>
+                <div class="feature-checklist">
                     {% for column in summary.columns %}
-                        {% if column not in [summary.suggestions["yield"], summary.suggestions["price"], summary.suggestions["demand"]] %}
-                            <option value="{{ column }}" selected>{{ column }}</option>
-                        {% else %}
-                            <option value="{{ column }}">{{ column }}</option>
-                        {% endif %}
+                        {% set is_target = column in [summary.suggestions["yield"], summary.suggestions["price"], summary.suggestions["demand"]] %}
+                        <label class="feature-option {% if is_target %}feature-option-muted{% endif %}">
+                            <input
+                                type="checkbox"
+                                name="feature_columns"
+                                value="{{ column }}"
+                                {% if not is_target %}checked{% endif %}
+                            >
+                            <span>{{ column }}</span>
+                        </label>
                     {% endfor %}
-                </select>
-                <small>Use Ctrl/Cmd + click to adjust selection. Target columns should usually stay unselected here.</small>
-            </div>
+                </div>
+                <small>Feature columns are preselected. Columns suggested as targets start unchecked for safer mobile configuration.</small>
+            </fieldset>
         </div>
 
         <div class="toggle-row">

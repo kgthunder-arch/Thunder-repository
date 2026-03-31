@@ -16,6 +16,11 @@
     box-sizing: border-box;
 }
 
+html,
+body {
+    overflow-x: hidden;
+}
+
 body {
     margin: 0;
     font-family: "Trebuchet MS", "Lucida Sans Unicode", "Segoe UI", sans-serif;
@@ -188,7 +193,7 @@ body {
 }
 
 .feature-grid {
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     margin-top: 18px;
 }
 
@@ -234,7 +239,7 @@ body {
 
 .source-grid,
 .toggle-row {
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .source-card,
@@ -243,6 +248,7 @@ body {
     display: flex;
     gap: 14px;
     cursor: pointer;
+    align-items: flex-start;
 }
 
 .source-card input,
@@ -268,7 +274,8 @@ body {
 input[type="file"],
 input[type="number"],
 input[type="range"],
-select {
+select,
+button {
     width: 100%;
 }
 
@@ -281,10 +288,59 @@ select {
     background: rgba(255, 255, 255, 0.82);
     color: var(--ink);
     font: inherit;
+    font-size: 16px;
 }
 
 select[multiple] {
     min-height: 240px;
+}
+
+fieldset {
+    margin: 0;
+    min-width: 0;
+}
+
+.feature-fieldset {
+    border: 1px solid rgba(79, 52, 34, 0.1);
+    border-radius: 20px;
+    padding: 18px;
+    background: rgba(255, 255, 255, 0.54);
+}
+
+.feature-fieldset legend {
+    padding: 0 8px;
+    font-weight: 700;
+    color: var(--soil);
+}
+
+.feature-checklist {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.feature-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(79, 52, 34, 0.1);
+    background: rgba(255, 255, 255, 0.86);
+    cursor: pointer;
+    min-width: 0;
+}
+
+.feature-option span {
+    overflow-wrap: anywhere;
+}
+
+.feature-option input {
+    flex: 0 0 auto;
+}
+
+.feature-option-muted {
+    opacity: 0.72;
 }
 
 .config-grid {
@@ -329,6 +385,7 @@ select[multiple] {
 .table-shell {
     width: 100%;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .data-table {
@@ -367,6 +424,15 @@ select[multiple] {
     padding: 18px;
 }
 
+.chart-card {
+    overflow: hidden;
+}
+
+.chart-card .plotly-graph-div,
+.chart-card .js-plotly-plot {
+    width: 100% !important;
+}
+
 .chart-grid,
 .table-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -396,6 +462,7 @@ select[multiple] {
     .page-shell {
         width: min(100% - 18px, 100%);
         margin-top: 12px;
+        margin-bottom: 28px;
     }
 
     .hero-shell,
@@ -405,5 +472,59 @@ select[multiple] {
 
     .hero-copy {
         padding-top: 28px;
+    }
+
+    .hero-shell::after {
+        width: 220px;
+        height: 220px;
+        inset: auto -18% -24% auto;
+    }
+
+    .hero-copy h1 {
+        font-size: clamp(2rem, 10vw, 2.8rem);
+    }
+
+    .eyebrow,
+    .section-kicker {
+        letter-spacing: 0.1em;
+    }
+
+    .source-card,
+    .toggle-card,
+    .feature-option,
+    .insight-card,
+    .table-card,
+    .chart-card {
+        padding: 16px;
+    }
+
+    .feature-checklist,
+    .stats-row,
+    .feature-grid,
+    .source-grid,
+    .toggle-row {
+        grid-template-columns: 1fr;
+    }
+
+    .primary-button,
+    .nav-link,
+    .brand-pill,
+    .recommendation-chip {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .data-table {
+        font-size: 0.86rem;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 10px 12px;
+    }
+
+    .page-footer {
+        padding-top: 2px;
+        font-size: 0.85rem;
     }
 }
