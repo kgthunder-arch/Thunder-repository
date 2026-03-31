@@ -603,12 +603,22 @@ fieldset {
     }
 
     .hero-band {
-        grid-template-columns: 1fr;
+        display: flex;
         gap: 12px;
+        overflow-x: auto;
+        padding-bottom: 6px;
+        scroll-snap-type: x proximity;
+        -webkit-overflow-scrolling: touch;
     }
 
     .hero-point {
-        padding-right: 0;
+        flex: 0 0 220px;
+        padding: 14px;
+        padding-right: 14px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        scroll-snap-align: start;
     }
 }
 
