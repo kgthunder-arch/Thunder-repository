@@ -18,3 +18,17 @@ if (testSize && testSizeValue) {
     updateTestLabel();
     testSize.addEventListener("input", updateTestLabel);
 }
+
+const resizePlotlyCharts = () => {
+    if (!window.Plotly) {
+        return;
+    }
+
+    document.querySelectorAll(".js-plotly-plot").forEach((chart) => {
+        window.Plotly.Plots.resize(chart);
+    });
+};
+
+window.addEventListener("load", resizePlotlyCharts);
+window.addEventListener("resize", resizePlotlyCharts);
+window.addEventListener("orientationchange", resizePlotlyCharts);

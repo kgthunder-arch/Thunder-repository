@@ -211,7 +211,11 @@ def create_metrics_chart(metrics_df: pd.DataFrame, forecast_label: str) -> str:
         margin=dict(l=20, r=20, t=60, b=20),
         legend_title_text="",
     )
-    return figure.to_html(full_html=False, include_plotlyjs=False, config={"displayModeBar": False})
+    return figure.to_html(
+        full_html=False,
+        include_plotlyjs=False,
+        config={"displayModeBar": False, "responsive": True},
+    )
 
 
 def create_prediction_chart(prediction_df: pd.DataFrame, forecast_label: str, model_name: str) -> str:
@@ -243,7 +247,11 @@ def create_prediction_chart(prediction_df: pd.DataFrame, forecast_label: str, mo
         margin=dict(l=20, r=20, t=60, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
-    return figure.to_html(full_html=False, include_plotlyjs=False, config={"displayModeBar": False})
+    return figure.to_html(
+        full_html=False,
+        include_plotlyjs=False,
+        config={"displayModeBar": False, "responsive": True},
+    )
 
 
 def create_scatter_chart(prediction_df: pd.DataFrame, forecast_label: str, model_name: str) -> str:
@@ -266,7 +274,11 @@ def create_scatter_chart(prediction_df: pd.DataFrame, forecast_label: str, model
         plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=20, r=20, t=60, b=20),
     )
-    return figure.to_html(full_html=False, include_plotlyjs=False, config={"displayModeBar": False})
+    return figure.to_html(
+        full_html=False,
+        include_plotlyjs=False,
+        config={"displayModeBar": False, "responsive": True},
+    )
 
 
 def recommendation_text(
