@@ -583,8 +583,11 @@ fieldset {
     }
 
     .hero-shell {
-        width: calc(100% + 12px);
-        margin-inline: -6px;
+        width: 100vw;
+        max-width: 100vw;
+        margin-left: calc(50% - 50vw);
+        margin-right: calc(50% - 50vw);
+        border-radius: 0 0 24px 24px;
     }
 
     .hero-copy {
@@ -659,8 +662,13 @@ fieldset {
     }
 
     .hero-shell {
-        width: calc(100% + 16px);
-        margin-inline: -8px;
+        width: 100vw;
+        max-width: 100vw;
+        margin-left: calc(50% - 50vw);
+        margin-right: calc(50% - 50vw);
+        padding-left: 18px;
+        padding-right: 18px;
+        border-radius: 0 0 22px 22px;
     }
 
     .brand-row,
