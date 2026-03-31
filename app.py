@@ -21,7 +21,11 @@ from werkzeug.utils import secure_filename
 
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+UPLOAD_FOLDER = (
+    os.path.join("/tmp", "uploads")
+    if os.getenv("VERCEL")
+    else os.path.join(BASE_DIR, "uploads")
+)
 SAMPLE_DATA_PATH = os.path.join(BASE_DIR, "sample_data", "agribusiness_sample.csv")
 ALLOWED_EXTENSIONS = {"csv", "xlsx", "xls"}
 
