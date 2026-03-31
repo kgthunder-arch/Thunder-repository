@@ -34,7 +34,8 @@ body {
 }
 
 .page-shell {
-    width: min(1180px, calc(100% - 32px));
+    width: calc(100% - 32px);
+    max-width: 1180px;
     margin: 24px auto 48px;
 }
 
@@ -64,6 +65,7 @@ body {
     justify-content: space-between;
     align-items: center;
     gap: 16px;
+    flex-wrap: wrap;
 }
 
 .brand-pill,
@@ -127,6 +129,8 @@ body {
 
 .supporting-text {
     max-width: 42rem;
+    flex: 1 1 280px;
+    margin: 0;
 }
 
 .hero-text {
@@ -180,11 +184,17 @@ body {
     justify-content: space-between;
     gap: 16px;
     align-items: flex-start;
+    flex-wrap: wrap;
 }
 
 .panel-header > *,
 .result-header > * {
     min-width: 0;
+}
+
+.panel-header > div,
+.result-header > div:first-child {
+    flex: 1 1 420px;
 }
 
 .panel-header h2,
@@ -204,7 +214,7 @@ body {
 }
 
 .feature-grid {
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
     margin-top: 18px;
 }
 
@@ -251,7 +261,7 @@ body {
 
 .source-grid,
 .toggle-row {
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
 }
 
 .source-card,
@@ -327,7 +337,7 @@ fieldset {
 
 .feature-checklist {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
     gap: 12px;
 }
 
@@ -470,7 +480,8 @@ fieldset {
 
 @media (min-width: 1100px) {
     .page-shell {
-        width: min(1280px, calc(100% - 48px));
+        width: calc(100% - 48px);
+        max-width: 1280px;
     }
 
     .feature-grid {
@@ -489,6 +500,21 @@ fieldset {
 
     .feature-checklist {
         grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 1100px) {
+    .panel-header,
+    .result-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .panel-header > div,
+    .result-header > div:first-child,
+    .supporting-text {
+        flex: 1 1 auto;
+        max-width: 100%;
     }
 }
 
