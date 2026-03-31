@@ -43,5 +43,6 @@ Thumbs.db
 # Project specific
 uploads/
 *.csv
+!sample_data/*.csv
 
 .vercel
