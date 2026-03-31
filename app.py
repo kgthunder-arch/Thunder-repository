@@ -5,6 +5,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+os.environ.setdefault("JOBLIB_MULTIPROCESSING", "0")
+
 import pandas as pd
 from flask import Flask, flash, redirect, render_template, request, url_for
 from sklearn.compose import ColumnTransformer
