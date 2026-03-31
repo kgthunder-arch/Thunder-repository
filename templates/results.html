@@ -32,15 +32,15 @@
 
     <div class="chart-grid">
         <div class="chart-card">
-            {{ result.metrics_chart|safe }}
+            <div class="plotly-chart" data-chart='{{ result.metrics_chart|tojson|safe }}'></div>
         </div>
         <div class="chart-card">
-            {{ result.prediction_chart|safe }}
+            <div class="plotly-chart" data-chart='{{ result.prediction_chart|tojson|safe }}'></div>
         </div>
     </div>
 
     <div class="chart-card full-width-card">
-        {{ result.scatter_chart|safe }}
+        <div class="plotly-chart" data-chart='{{ result.scatter_chart|tojson|safe }}'></div>
     </div>
 
     <div class="table-grid">

@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import pandas as pd
-import plotly.graph_objects as go
 from flask import Flask, flash, redirect, render_template, request, url_for
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestRegressor
@@ -185,99 +184,100 @@ def calculate_cv_summary(
     }
 
 
-def create_metrics_chart(metrics_df: pd.DataFrame, forecast_label: str) -> str:
-    figure = go.Figure()
+def chart_payload(data: list[dict[str, Any]], layout: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "data": data,
+        "layout": layout,
+        "config": {"displayModeBar": False, "responsive": True},
+    }
+
+
+def create_metrics_chart(metrics_df: pd.DataFrame, forecast_label: str) -> dict[str, Any]:
     metric_styles = {
         "MAE": "#5f8d4e",
         "RMSE": "#a4be7b",
         "R2": "#285430",
     }
 
+    data: list[dict[str, Any]] = []
     for metric_name, color in metric_styles.items():
-        figure.add_trace(
-            go.Bar(
-                x=metrics_df["Model"],
-                y=metrics_df[metric_name],
-                name=metric_name,
-                marker_color=color,
-            )
+        data.append(
+            {
+                "type": "bar",
+                "x": metrics_df["Model"].tolist(),
+                "y": metrics_df[metric_name].tolist(),
+                "name": metric_name,
+                "marker": {"color": color},
+            }
         )
 
-    figure.update_layout(
-        title=f"{forecast_label} Model Comparison",
-        barmode="group",
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=20, r=20, t=60, b=20),
-        legend_title_text="",
-    )
-    return figure.to_html(
-        full_html=False,
-        include_plotlyjs=False,
-        config={"displayModeBar": False, "responsive": True},
+    return chart_payload(
+        data=data,
+        layout={
+            "title": {"text": f"{forecast_label} Model Comparison"},
+            "barmode": "group",
+            "paper_bgcolor": "rgba(0,0,0,0)",
+            "plot_bgcolor": "rgba(0,0,0,0)",
+            "margin": {"l": 20, "r": 20, "t": 60, "b": 20},
+            "legend": {"title": {"text": ""}},
+        },
     )
 
 
-def create_prediction_chart(prediction_df: pd.DataFrame, forecast_label: str, model_name: str) -> str:
-    figure = go.Figure()
-    figure.add_trace(
-        go.Scatter(
-            x=prediction_df["Record"],
-            y=prediction_df["Actual"],
-            mode="lines+markers",
-            name="Actual",
-            line=dict(color="#d8f3dc", width=3),
-        )
-    )
-    figure.add_trace(
-        go.Scatter(
-            x=prediction_df["Record"],
-            y=prediction_df["Predicted"],
-            mode="lines+markers",
-            name="Predicted",
-            line=dict(color="#f4a259", width=3),
-        )
-    )
-    figure.update_layout(
-        title=f"{forecast_label} Forecast: Actual vs Predicted ({model_name})",
-        xaxis_title="Test Record",
-        yaxis_title=forecast_label,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=20, r=20, t=60, b=20),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    )
-    return figure.to_html(
-        full_html=False,
-        include_plotlyjs=False,
-        config={"displayModeBar": False, "responsive": True},
-    )
-
-
-def create_scatter_chart(prediction_df: pd.DataFrame, forecast_label: str, model_name: str) -> str:
-    figure = go.Figure(
+def create_prediction_chart(
+    prediction_df: pd.DataFrame, forecast_label: str, model_name: str
+) -> dict[str, Any]:
+    return chart_payload(
         data=[
-            go.Scatter(
-                x=prediction_df["Actual"],
-                y=prediction_df["Predicted"],
-                mode="markers",
-                marker=dict(color="#bc4749", size=10, opacity=0.82),
-                name="Prediction",
-            )
-        ]
+            {
+                "type": "scatter",
+                "x": prediction_df["Record"].tolist(),
+                "y": prediction_df["Actual"].tolist(),
+                "mode": "lines+markers",
+                "name": "Actual",
+                "line": {"color": "#d8f3dc", "width": 3},
+            },
+            {
+                "type": "scatter",
+                "x": prediction_df["Record"].tolist(),
+                "y": prediction_df["Predicted"].tolist(),
+                "mode": "lines+markers",
+                "name": "Predicted",
+                "line": {"color": "#f4a259", "width": 3},
+            },
+        ],
+        layout={
+            "title": {"text": f"{forecast_label} Forecast: Actual vs Predicted ({model_name})"},
+            "xaxis": {"title": {"text": "Test Record"}},
+            "yaxis": {"title": {"text": forecast_label}},
+            "paper_bgcolor": "rgba(0,0,0,0)",
+            "plot_bgcolor": "rgba(0,0,0,0)",
+            "margin": {"l": 20, "r": 20, "t": 60, "b": 20},
+            "legend": {"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1},
+        },
     )
-    figure.update_layout(
-        title=f"{forecast_label} Accuracy Scatter ({model_name})",
-        xaxis_title="Actual",
-        yaxis_title="Predicted",
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=20, r=20, t=60, b=20),
-    )
-    return figure.to_html(
-        full_html=False,
-        include_plotlyjs=False,
-        config={"displayModeBar": False, "responsive": True},
+
+
+def create_scatter_chart(prediction_df: pd.DataFrame, forecast_label: str, model_name: str) -> dict[str, Any]:
+    return chart_payload(
+        data=[
+            {
+                "type": "scatter",
+                "x": prediction_df["Actual"].tolist(),
+                "y": prediction_df["Predicted"].tolist(),
+                "mode": "markers",
+                "marker": {"color": "#bc4749", "size": 10, "opacity": 0.82},
+                "name": "Prediction",
+            }
+        ],
+        layout={
+            "title": {"text": f"{forecast_label} Accuracy Scatter ({model_name})"},
+            "xaxis": {"title": {"text": "Actual"}},
+            "yaxis": {"title": {"text": "Predicted"}},
+            "paper_bgcolor": "rgba(0,0,0,0)",
+            "plot_bgcolor": "rgba(0,0,0,0)",
+            "margin": {"l": 20, "r": 20, "t": 60, "b": 20},
+        },
     )
 
 
