@@ -257,7 +257,8 @@ body {
 .chart-grid,
 .table-grid,
 .toggle-row,
-.config-grid {
+.config-grid,
+.history-grid {
     display: grid;
     gap: 16px;
 }
@@ -273,7 +274,8 @@ body {
 .toggle-card,
 .chart-card,
 .table-card,
-.insight-card {
+.insight-card,
+.history-card {
     border-radius: 22px;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(243, 239, 230, 0.7));
     border: 1px solid rgba(79, 52, 34, 0.09);
@@ -329,7 +331,8 @@ body {
 .stat-card,
 .table-card,
 .chart-card,
-.insight-card {
+.insight-card,
+.history-card {
     min-width: 0;
 }
 
@@ -450,6 +453,24 @@ fieldset {
     max-width: 100%;
 }
 
+.secondary-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: fit-content;
+    max-width: 100%;
+    padding: 11px 16px;
+    border-radius: 999px;
+    text-decoration: none;
+    color: var(--leaf);
+    background: rgba(53, 94, 59, 0.1);
+    font-weight: 700;
+}
+
+.inline-link {
+    margin-left: 8px;
+}
+
 .stats-row {
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     margin-top: 20px;
@@ -508,6 +529,42 @@ fieldset {
     padding: 18px;
 }
 
+.history-grid {
+    grid-template-columns: 1fr;
+}
+
+.history-card {
+    padding: 18px;
+    display: grid;
+    gap: 10px;
+}
+
+.history-card h3 {
+    margin: 0;
+}
+
+.history-meta,
+.history-storage,
+.history-targets,
+.history-models {
+    margin: 0;
+}
+
+.history-meta,
+.history-storage {
+    color: rgba(24, 34, 24, 0.6);
+    font-size: 0.9rem;
+}
+
+.history-targets {
+    color: var(--soil);
+    font-weight: 700;
+}
+
+.history-models {
+    color: rgba(24, 34, 24, 0.75);
+}
+
 .chart-card {
     overflow: hidden;
     min-width: 0;
@@ -540,7 +597,8 @@ fieldset {
 @media (min-width: 700px) {
     .feature-grid,
     .feature-checklist,
-    .stats-row {
+    .stats-row,
+    .history-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
@@ -689,7 +747,8 @@ fieldset {
     .feature-option,
     .insight-card,
     .table-card,
-    .chart-card {
+    .chart-card,
+    .history-card {
         padding: 16px;
     }
 
@@ -707,6 +766,10 @@ fieldset {
     .recommendation-chip {
         width: 100%;
         justify-content: center;
+    }
+
+    .secondary-link {
+        width: 100%;
     }
 
     .data-table {
@@ -801,7 +864,8 @@ fieldset {
 
     .chart-card,
     .table-card,
-    .insight-card {
+    .insight-card,
+    .history-card {
         padding: 14px;
     }
 

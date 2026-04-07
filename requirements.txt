@@ -4,3 +4,4 @@ numpy>=1.26
 pandas>=2.2
 scikit-learn>=1.5
 openpyxl>=3.1
+vercel>=0.5.3,<0.6

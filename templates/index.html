@@ -70,6 +70,49 @@
     </form>
 </section>
 
+<section class="panel storage-panel">
+    <div class="panel-header">
+        <div>
+            <p class="section-kicker">Storage</p>
+            <h2>{{ storage_status.label }}</h2>
+        </div>
+        <p class="supporting-text">{{ storage_status.description }}</p>
+    </div>
+</section>
+
+<section class="panel history-panel">
+    <div class="panel-header">
+        <div>
+            <p class="section-kicker">Saved Analyses</p>
+            <h2>Recent forecasting work</h2>
+        </div>
+        <p class="supporting-text">
+            {% if recent_analyses %}
+                Reopen a saved result set without uploading the same dataset again.
+            {% elif storage_status.mode == "session" %}
+                Durable saved history appears here after Vercel Blob is configured with `BLOB_READ_WRITE_TOKEN`.
+            {% else %}
+                Run an analysis and the latest saved reports will appear here automatically.
+            {% endif %}
+        </p>
+    </div>
+
+    {% if recent_analyses %}
+        <div class="history-grid">
+            {% for analysis in recent_analyses %}
+                <article class="history-card">
+                    <p class="history-meta">{{ analysis.created_at_label }}</p>
+                    <h3>{{ analysis.filename }}</h3>
+                    <p class="history-storage">{{ analysis.storage_label }}</p>
+                    <p class="history-targets">{{ analysis.targets|join(", ") }}</p>
+                    <p class="history-models">{{ analysis.best_models|join(" | ") }}</p>
+                    <a class="secondary-link" href="{{ url_for('view_saved_analysis', analysis_id=analysis.analysis_id) }}">Open saved report</a>
+                </article>
+            {% endfor %}
+        </div>
+    {% endif %}
+</section>
+
 <section class="panel sample-panel">
     <div class="panel-header">
         <div>

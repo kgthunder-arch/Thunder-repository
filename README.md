@@ -1,17 +1,14 @@
-# Common Ground Flask App
+# Agribusiness Predictive Analysis App
 
-This project now runs as a Flask app with two experiences:
-
-- `/` serves the new Common Ground global collaboration product experience
-- `/agribusiness` preserves the existing agribusiness predictive analysis workflow
+This Flask app lets agribusiness teams upload crop, weather, and market datasets, compare multiple machine learning models, and review saved forecast analyses.
 
 ## Main Files
 
-- `app.py`: Flask entrypoint and routing
-- `templates/common_ground.html`: Common Ground homepage
-- `static/common-ground/styles.css`: Common Ground visual design
-- `static/common-ground/app.js`: Common Ground interactions
-- `templates/index.html`, `templates/configure.html`, `templates/results.html`: agribusiness workflow
+- `app.py`: Flask entrypoint, model training flow, and storage integration
+- `api/index.py`: Vercel Python function entrypoint
+- `templates/index.html`, `templates/configure.html`, `templates/results.html`: agribusiness workflow UI
+- `static/css/styles.css`, `static/js/app.js`: frontend styles and chart rendering
+- `sample_data/agribusiness_sample.csv`: bundled demo dataset
 
 ## Run Locally
 
@@ -37,10 +34,18 @@ python app.py
 
 4. Open:
 
-- `http://127.0.0.1:5000/` for Common Ground
-- `http://127.0.0.1:5000/agribusiness` for the agribusiness analyzer
+- `http://127.0.0.1:5000/`
+
+## Storage Modes
+
+- Local development:
+  uploaded datasets and saved analyses are stored in `storage/`
+- Vercel with `BLOB_READ_WRITE_TOKEN`:
+  uploads and saved analyses are stored durably in Vercel Blob
+- Vercel without `BLOB_READ_WRITE_TOKEN`:
+  uploads use temporary runtime storage only
 
 ## Notes
 
-- In this Codex environment, `python` is not currently available on the PATH, so I could not launch the Flask server here.
-- The Flask wiring, templates, and static assets are in place and ready to run on a machine with Python installed.
+- Saved analyses can be reopened from the homepage history section.
+- `storage/` is ignored by Git so local saved uploads and reports stay out of the repository.

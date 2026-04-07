@@ -7,7 +7,10 @@
             <p class="section-kicker">Configuration</p>
             <h2>Prepare {{ summary.filename }} for forecasting</h2>
         </div>
-        <p class="supporting-text">Map your targets, choose the predictor columns, and set the validation strategy.</p>
+        <p class="supporting-text">
+            Map your targets, choose the predictor columns, and set the validation strategy.
+            Dataset storage: {{ summary.storage_label }}.
+        </p>
     </div>
 
     <div class="stats-row">
@@ -29,6 +32,7 @@
 <section class="panel config-panel">
     <form action="{{ url_for('analyze') }}" method="post" class="config-form">
         <input type="hidden" name="dataset_path" value="{{ summary.path }}">
+        <input type="hidden" name="dataset_source_kind" value="{{ summary.source_kind }}">
         <input type="hidden" name="filename" value="{{ summary.filename }}">
 
         <div class="config-grid">

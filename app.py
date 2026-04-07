@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 os.environ.setdefault("JOBLIB_MULTIPROCESSING", "0")
@@ -20,17 +25,30 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.tree import DecisionTreeRegressor
 from werkzeug.utils import secure_filename
 
+try:
+    from vercel.blob import get as get_blob
+    from vercel.blob import list_objects, put as put_blob
+except ImportError:
+    get_blob = None
+    list_objects = None
+    put_blob = None
+
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-UPLOAD_FOLDER = (
-    os.path.join("/tmp", "uploads")
-    if os.getenv("VERCEL")
-    else os.path.join(BASE_DIR, "uploads")
-)
+IS_VERCEL = bool(os.getenv("VERCEL"))
+BLOB_TOKEN = os.getenv("BLOB_READ_WRITE_TOKEN")
+UPLOAD_FOLDER = os.path.join("/tmp", "uploads") if IS_VERCEL else os.path.join(BASE_DIR, "uploads")
+PERSISTENT_STORAGE_DIR = os.path.join(BASE_DIR, "storage")
+PERSISTENT_UPLOADS_DIR = os.path.join(PERSISTENT_STORAGE_DIR, "uploads")
+PERSISTENT_ANALYSES_DIR = os.path.join(PERSISTENT_STORAGE_DIR, "analyses")
 SAMPLE_DATA_PATH = os.path.join(BASE_DIR, "sample_data", "agribusiness_sample.csv")
 ALLOWED_EXTENSIONS = {"csv", "xlsx", "xls"}
+RECENT_ANALYSIS_LIMIT = 4
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+if not IS_VERCEL:
+    os.makedirs(PERSISTENT_UPLOADS_DIR, exist_ok=True)
+    os.makedirs(PERSISTENT_ANALYSES_DIR, exist_ok=True)
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "agribusiness-predictive-analysis-secret"
@@ -47,10 +65,83 @@ class DatasetSummary:
     numeric_columns: list[str]
     preview_html: str
     suggestions: dict[str, str]
+    source_kind: str
+    storage_label: str
+
+
+@dataclass
+class SavedAnalysisSummary:
+    analysis_id: str
+    filename: str
+    created_at_label: str
+    targets: list[str]
+    best_models: list[str]
+    storage_label: str
 
 
 def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def blob_storage_enabled() -> bool:
+    return bool(BLOB_TOKEN and put_blob and get_blob and list_objects)
+
+
+def active_storage_mode() -> str:
+    if blob_storage_enabled():
+        return "blob"
+    if IS_VERCEL:
+        return "session"
+    return "local"
+
+
+def storage_label_for_source(source_kind: str) -> str:
+    labels = {
+        "sample": "Bundled sample dataset",
+        "blob": "Durable Vercel Blob storage",
+        "local": "Local saved storage",
+        "session": "Temporary Vercel runtime storage",
+    }
+    return labels.get(source_kind, "Dataset storage")
+
+
+def current_storage_status() -> dict[str, str]:
+    mode = active_storage_mode()
+    descriptions = {
+        "blob": "Uploads and saved analyses are stored durably in Vercel Blob.",
+        "local": "Uploads and saved analyses are stored locally on disk for development.",
+        "session": "Uploads use temporary runtime storage. Add BLOB_READ_WRITE_TOKEN to enable durable Vercel persistence.",
+    }
+    return {
+        "mode": mode,
+        "label": storage_label_for_source(mode),
+        "description": descriptions[mode],
+    }
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def humanize_timestamp(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return value
+    return parsed.astimezone(timezone.utc).strftime("%b %d, %Y %H:%M UTC")
+
+
+def collect_blob_stream(stream: Any) -> bytes:
+    if hasattr(stream, "__aiter__"):
+        async def _consume_async() -> bytes:
+            chunks: list[bytes] = []
+            async for chunk in stream:
+                chunks.append(chunk)
+            return b"".join(chunks)
+
+        return asyncio.run(_consume_async())
+
+    return b"".join(stream)
 
 
 def read_dataset(file_path: str) -> pd.DataFrame:
@@ -58,6 +149,31 @@ def read_dataset(file_path: str) -> pd.DataFrame:
     if extension == "csv":
         return pd.read_csv(file_path)
     return pd.read_excel(file_path)
+
+
+def read_dataset_content(filename: str, content: bytes) -> pd.DataFrame:
+    extension = filename.rsplit(".", 1)[1].lower()
+    buffer = BytesIO(content)
+    if extension == "csv":
+        return pd.read_csv(buffer)
+    return pd.read_excel(buffer)
+
+
+def load_blob_bytes(pathname: str) -> bytes:
+    result = get_blob(pathname, access="private")
+    if result is None or result.status_code != 200 or result.stream is None:
+        raise FileNotFoundError(f"Blob not found: {pathname}")
+    return collect_blob_stream(result.stream)
+
+
+def load_dataset_from_reference(source_kind: str, reference: str, filename: str) -> pd.DataFrame:
+    if source_kind in {"sample", "local", "session"}:
+        if not os.path.exists(reference):
+            raise FileNotFoundError(reference)
+        return read_dataset(reference)
+    if source_kind == "blob":
+        return read_dataset_content(filename, load_blob_bytes(reference))
+    raise ValueError(f"Unsupported dataset source: {source_kind}")
 
 
 def suggest_targets(columns: list[str]) -> dict[str, str]:
@@ -77,14 +193,21 @@ def suggest_targets(columns: list[str]) -> dict[str, str]:
     return suggestions
 
 
-def summarize_dataset(file_path: str, filename: str) -> DatasetSummary:
-    dataframe = read_dataset(file_path)
+def build_dataset_summary(
+    dataframe: pd.DataFrame,
+    filename: str,
+    reference: str,
+    source_kind: str,
+) -> DatasetSummary:
     preview = dataframe.head(8).to_html(
-        classes="data-table preview-table", index=False, border=0, justify="left"
+        classes="data-table preview-table",
+        index=False,
+        border=0,
+        justify="left",
     )
     numeric_columns = dataframe.select_dtypes(include="number").columns.tolist()
     return DatasetSummary(
-        path=file_path,
+        path=reference,
         filename=filename,
         row_count=int(dataframe.shape[0]),
         column_count=int(dataframe.shape[1]),
@@ -92,7 +215,138 @@ def summarize_dataset(file_path: str, filename: str) -> DatasetSummary:
         numeric_columns=numeric_columns,
         preview_html=preview,
         suggestions=suggest_targets(dataframe.columns.tolist()),
+        source_kind=source_kind,
+        storage_label=storage_label_for_source(source_kind),
     )
+
+
+def summarize_dataset(file_path: str, filename: str, source_kind: str) -> DatasetSummary:
+    return build_dataset_summary(read_dataset(file_path), filename, file_path, source_kind)
+
+
+def persist_uploaded_dataset(uploaded_file: Any) -> tuple[str, str, pd.DataFrame, str]:
+    safe_name = secure_filename(uploaded_file.filename or "dataset.csv")
+    if not allowed_file(safe_name):
+        raise ValueError("Upload a CSV or Excel dataset file.")
+
+    content = uploaded_file.read()
+    dataset_id = uuid.uuid4().hex
+    content_type = uploaded_file.mimetype or "application/octet-stream"
+    dataframe = read_dataset_content(safe_name, content)
+    storage_mode = active_storage_mode()
+
+    if storage_mode == "blob":
+        blob = put_blob(
+            f"datasets/{dataset_id}-{safe_name}",
+            content,
+            access="private",
+            add_random_suffix=False,
+            content_type=content_type,
+        )
+        return "blob", blob.pathname, dataframe, safe_name
+
+    target_dir = PERSISTENT_UPLOADS_DIR if storage_mode == "local" else UPLOAD_FOLDER
+    stored_path = os.path.join(target_dir, f"{dataset_id}_{safe_name}")
+    with open(stored_path, "wb") as saved_file:
+        saved_file.write(content)
+    return storage_mode, stored_path, dataframe, safe_name
+
+
+def local_analysis_path(analysis_id: str) -> str:
+    return os.path.join(PERSISTENT_ANALYSES_DIR, f"{analysis_id}.json")
+
+
+def session_analysis_path(analysis_id: str) -> str:
+    return os.path.join(UPLOAD_FOLDER, f"analysis_{analysis_id}.json")
+
+
+def save_analysis_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
+    storage_mode = active_storage_mode()
+    analysis_id = uuid.uuid4().hex[:12]
+    saved_at = utc_now().isoformat()
+    record = {
+        "analysis_id": analysis_id,
+        "saved_at": saved_at,
+        "storage_mode": storage_mode,
+        "storage_label": storage_label_for_source(storage_mode),
+        **payload,
+    }
+    serialized = json.dumps(record, ensure_ascii=True).encode("utf-8")
+
+    if storage_mode == "blob":
+        put_blob(
+            f"analyses/{analysis_id}.json",
+            serialized,
+            access="private",
+            add_random_suffix=False,
+            content_type="application/json",
+        )
+    else:
+        output_path = local_analysis_path(analysis_id) if storage_mode == "local" else session_analysis_path(analysis_id)
+        with open(output_path, "wb") as output_file:
+            output_file.write(serialized)
+
+    return record
+
+
+def load_analysis_snapshot(analysis_id: str) -> dict[str, Any] | None:
+    storage_mode = active_storage_mode()
+    try:
+        if storage_mode == "blob":
+            raw_bytes = load_blob_bytes(f"analyses/{analysis_id}.json")
+        else:
+            snapshot_path = local_analysis_path(analysis_id) if storage_mode == "local" else session_analysis_path(analysis_id)
+            if not os.path.exists(snapshot_path):
+                return None
+            with open(snapshot_path, "rb") as snapshot_file:
+                raw_bytes = snapshot_file.read()
+    except FileNotFoundError:
+        return None
+
+    return json.loads(raw_bytes.decode("utf-8"))
+
+
+def recent_saved_analyses(limit: int = RECENT_ANALYSIS_LIMIT) -> list[SavedAnalysisSummary]:
+    storage_mode = active_storage_mode()
+    records: list[dict[str, Any]] = []
+
+    if storage_mode == "blob":
+        listing = list_objects(prefix="analyses/", limit=50)
+        for item in listing.blobs:
+            if not item.pathname.endswith(".json"):
+                continue
+            try:
+                record = json.loads(load_blob_bytes(item.pathname).decode("utf-8"))
+            except Exception:
+                continue
+            records.append(record)
+    elif storage_mode == "local":
+        analysis_dir = Path(PERSISTENT_ANALYSES_DIR)
+        for path in analysis_dir.glob("*.json"):
+            try:
+                records.append(json.loads(path.read_text(encoding="utf-8")))
+            except Exception:
+                continue
+    else:
+        return []
+
+    records.sort(key=lambda item: item.get("saved_at", ""), reverse=True)
+    summaries: list[SavedAnalysisSummary] = []
+    for record in records[:limit]:
+        summaries.append(
+            SavedAnalysisSummary(
+                analysis_id=record["analysis_id"],
+                filename=record.get("filename", "dataset"),
+                created_at_label=humanize_timestamp(record.get("saved_at", "")),
+                targets=[result["forecast_label"] for result in record.get("results", [])],
+                best_models=[
+                    f"{result['forecast_label']}: {result['best_model']}"
+                    for result in record.get("results", [])
+                ],
+                storage_label=record.get("storage_label", storage_label_for_source(record.get("storage_mode", "local"))),
+            )
+        )
+    return summaries
 
 
 def expand_datetime_features(dataframe: pd.DataFrame) -> pd.DataFrame:
@@ -425,8 +679,35 @@ def default_feature_columns(columns: list[str], selected_targets: list[str]) -> 
 
 @app.get("/")
 def agribusiness_index() -> str:
-    sample_summary = summarize_dataset(SAMPLE_DATA_PATH, "agribusiness_sample.csv")
-    return render_template("index.html", sample_summary=sample_summary)
+    sample_summary = summarize_dataset(SAMPLE_DATA_PATH, "agribusiness_sample.csv", "sample")
+    return render_template(
+        "index.html",
+        sample_summary=sample_summary,
+        storage_status=current_storage_status(),
+        recent_analyses=recent_saved_analyses(),
+    )
+
+
+@app.get("/analysis/<analysis_id>")
+def view_saved_analysis(analysis_id: str) -> str:
+    snapshot = load_analysis_snapshot(analysis_id)
+    if snapshot is None:
+        flash("That saved analysis is no longer available in the current storage mode.", "error")
+        return redirect(url_for("agribusiness_index"))
+
+    return render_template(
+        "results.html",
+        filename=snapshot["filename"],
+        results=snapshot["results"],
+        use_holdout=snapshot["use_holdout"],
+        use_cv=snapshot["use_cv"],
+        feature_columns=snapshot["feature_columns"],
+        analysis_summary={
+            "analysis_id": snapshot["analysis_id"],
+            "saved_at_label": humanize_timestamp(snapshot["saved_at"]),
+            "storage_label": snapshot["storage_label"],
+        },
+    )
 
 
 @app.post("/upload")
@@ -435,39 +716,34 @@ def upload() -> str:
 
     try:
         if source == "sample":
-            summary = summarize_dataset(SAMPLE_DATA_PATH, "agribusiness_sample.csv")
+            summary = summarize_dataset(SAMPLE_DATA_PATH, "agribusiness_sample.csv", "sample")
         else:
             uploaded_file = request.files.get("dataset")
             if uploaded_file is None or uploaded_file.filename == "":
                 flash("Please choose a dataset file to continue.", "error")
                 return redirect(url_for("agribusiness_index"))
-            if not allowed_file(uploaded_file.filename):
-                flash("Upload a CSV or Excel dataset file.", "error")
-                return redirect(url_for("agribusiness_index"))
 
-            safe_name = secure_filename(uploaded_file.filename)
-            stored_name = f"{uuid.uuid4().hex}_{safe_name}"
-            stored_path = os.path.join(app.config["UPLOAD_FOLDER"], stored_name)
-            uploaded_file.save(stored_path)
-            summary = summarize_dataset(stored_path, safe_name)
+            source_kind, reference, dataframe, safe_name = persist_uploaded_dataset(uploaded_file)
+            summary = build_dataset_summary(dataframe, safe_name, reference, source_kind)
     except Exception as exc:
         flash(f"Unable to read the dataset: {exc}", "error")
         return redirect(url_for("agribusiness_index"))
 
-    return render_template("configure.html", summary=summary)
+    return render_template("configure.html", summary=summary, storage_status=current_storage_status())
 
 
 @app.post("/analyze")
 def analyze() -> str:
-    dataset_path = request.form.get("dataset_path", "")
+    dataset_reference = request.form.get("dataset_path", "")
+    dataset_source_kind = request.form.get("dataset_source_kind", "sample")
     filename = request.form.get("filename", "dataset")
 
-    if not dataset_path or not os.path.exists(dataset_path):
-        flash("The dataset session expired. Upload the file again.", "error")
+    if not dataset_reference:
+        flash("The dataset reference is missing. Upload the file again.", "error")
         return redirect(url_for("agribusiness_index"))
 
     try:
-        dataframe = read_dataset(dataset_path)
+        dataframe = load_dataset_from_reference(dataset_source_kind, dataset_reference, filename)
         selected_targets = {
             "Crop Yield": request.form.get("yield_target", "").strip(),
             "Market Price": request.form.get("price_target", "").strip(),
@@ -511,9 +787,33 @@ def analyze() -> str:
                     cv_folds=cv_folds,
                 )
             )
+    except FileNotFoundError:
+        flash("The dataset is no longer available. Upload it again to continue.", "error")
+        return redirect(url_for("agribusiness_index"))
     except Exception as exc:
         flash(f"Analysis could not be completed: {exc}", "error")
         return redirect(url_for("agribusiness_index"))
+
+    analysis_summary: dict[str, str] | None = None
+    try:
+        snapshot = save_analysis_snapshot(
+            {
+                "filename": filename,
+                "dataset_reference": dataset_reference,
+                "dataset_source_kind": dataset_source_kind,
+                "feature_columns": feature_columns,
+                "use_holdout": use_holdout,
+                "use_cv": use_cv,
+                "results": results,
+            }
+        )
+        analysis_summary = {
+            "analysis_id": snapshot["analysis_id"],
+            "saved_at_label": humanize_timestamp(snapshot["saved_at"]),
+            "storage_label": snapshot["storage_label"],
+        }
+    except Exception as exc:
+        flash(f"Analysis finished, but the save step failed: {exc}", "error")
 
     return render_template(
         "results.html",
@@ -522,6 +822,7 @@ def analyze() -> str:
         use_holdout=use_holdout,
         use_cv=use_cv,
         feature_columns=feature_columns,
+        analysis_summary=analysis_summary,
     )
 
 

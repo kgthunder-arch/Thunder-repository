@@ -15,6 +15,21 @@
     </div>
 </section>
 
+{% if analysis_summary %}
+<section class="panel storage-panel">
+    <div class="panel-header">
+        <div>
+            <p class="section-kicker">Saved Snapshot</p>
+            <h2>Analysis {{ analysis_summary.analysis_id }}</h2>
+        </div>
+        <p class="supporting-text">
+            Saved {{ analysis_summary.saved_at_label }} in {{ analysis_summary.storage_label }}.
+            <a class="secondary-link inline-link" href="{{ url_for('view_saved_analysis', analysis_id=analysis_summary.analysis_id) }}">Open saved link</a>
+        </p>
+    </div>
+</section>
+{% endif %}
+
 {% for result in results %}
 <section class="panel result-panel">
     <div class="result-header">
