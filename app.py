@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import uuid
@@ -9,6 +8,9 @@ from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError
+from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlunparse
+from urllib.request import Request, urlopen
 
 os.environ.setdefault("JOBLIB_MULTIPROCESSING", "0")
 
@@ -25,18 +27,20 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.tree import DecisionTreeRegressor
 from werkzeug.utils import secure_filename
 
-try:
-    from vercel.blob import get as get_blob
-    from vercel.blob import list_objects, put as put_blob
-except ImportError:
-    get_blob = None
-    list_objects = None
-    put_blob = None
-
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 IS_VERCEL = bool(os.getenv("VERCEL"))
 BLOB_TOKEN = os.getenv("BLOB_READ_WRITE_TOKEN")
+BLOB_API_URL = (
+    os.getenv("VERCEL_BLOB_API_URL")
+    or os.getenv("NEXT_PUBLIC_VERCEL_BLOB_API_URL")
+    or "https://vercel.com/api/blob"
+)
+BLOB_API_VERSION = (
+    os.getenv("VERCEL_BLOB_API_VERSION_OVERRIDE")
+    or os.getenv("NEXT_PUBLIC_VERCEL_BLOB_API_VERSION_OVERRIDE")
+    or "11"
+)
 UPLOAD_FOLDER = os.path.join("/tmp", "uploads") if IS_VERCEL else os.path.join(BASE_DIR, "uploads")
 PERSISTENT_STORAGE_DIR = os.path.join(BASE_DIR, "storage")
 PERSISTENT_UPLOADS_DIR = os.path.join(PERSISTENT_STORAGE_DIR, "uploads")
@@ -79,12 +83,28 @@ class SavedAnalysisSummary:
     storage_label: str
 
 
+@dataclass
+class BlobPutResult:
+    pathname: str
+
+
+@dataclass
+class BlobListItem:
+    pathname: str
+    uploaded_at: str
+
+
+@dataclass
+class BlobListResult:
+    blobs: list[BlobListItem]
+
+
 def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
 def blob_storage_enabled() -> bool:
-    return bool(BLOB_TOKEN and put_blob and get_blob and list_objects)
+    return bool(BLOB_TOKEN)
 
 
 def active_storage_mode() -> str:
@@ -131,17 +151,97 @@ def humanize_timestamp(value: str) -> str:
     return parsed.astimezone(timezone.utc).strftime("%b %d, %Y %H:%M UTC")
 
 
-def collect_blob_stream(stream: Any) -> bytes:
-    if hasattr(stream, "__aiter__"):
-        async def _consume_async() -> bytes:
-            chunks: list[bytes] = []
-            async for chunk in stream:
-                chunks.append(chunk)
-            return b"".join(chunks)
+def blob_store_id(token: str) -> str:
+    parts = token.split("_")
+    return parts[3] if len(parts) > 3 else ""
 
-        return asyncio.run(_consume_async())
 
-    return b"".join(stream)
+def blob_request_headers(extra_headers: dict[str, str] | None = None) -> dict[str, str]:
+    headers = {
+        "Authorization": f"Bearer {BLOB_TOKEN}",
+        "x-api-version": BLOB_API_VERSION,
+    }
+    if extra_headers:
+        headers.update(extra_headers)
+    return headers
+
+
+def blob_api_json_request(
+    method: str,
+    *,
+    query: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+    body: bytes | None = None,
+) -> dict[str, Any]:
+    url = BLOB_API_URL
+    if query:
+        filtered = {key: value for key, value in query.items() if value is not None}
+        if filtered:
+            url = f"{url}?{urlencode(filtered)}"
+
+    request = Request(
+        url,
+        data=body,
+        headers=blob_request_headers(headers),
+        method=method,
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"Blob API request failed ({exc.code}): {detail}") from exc
+
+
+def blob_download_url(pathname: str) -> str:
+    store_id = blob_store_id(BLOB_TOKEN or "")
+    if not store_id:
+        metadata = blob_api_json_request("GET", query={"url": pathname})
+        return metadata["url"]
+
+    safe_pathname = quote(pathname.lstrip("/"), safe="/")
+    return f"https://{store_id}.private.blob.vercel-storage.com/{safe_pathname}"
+
+
+def put_blob(
+    path: str,
+    body: bytes,
+    *,
+    access: str,
+    add_random_suffix: bool,
+    content_type: str | None,
+    overwrite: bool = False,
+) -> BlobPutResult:
+    response = blob_api_json_request(
+        "PUT",
+        query={"pathname": path},
+        headers={
+            "x-vercel-blob-access": access,
+            "x-add-random-suffix": "1" if add_random_suffix else "0",
+            "x-allow-overwrite": "1" if overwrite else "0",
+            **({"x-content-type": content_type} if content_type else {}),
+        },
+        body=body,
+    )
+    return BlobPutResult(pathname=response["pathname"])
+
+
+def list_objects(*, limit: int | None = None, prefix: str | None = None) -> BlobListResult:
+    response = blob_api_json_request(
+        "GET",
+        query={
+            "limit": limit,
+            "prefix": prefix,
+        },
+    )
+    blobs = [
+        BlobListItem(
+            pathname=item["pathname"],
+            uploaded_at=item.get("uploadedAt", ""),
+        )
+        for item in response.get("blobs", [])
+    ]
+    return BlobListResult(blobs=blobs)
 
 
 def read_dataset(file_path: str) -> pd.DataFrame:
@@ -160,10 +260,19 @@ def read_dataset_content(filename: str, content: bytes) -> pd.DataFrame:
 
 
 def load_blob_bytes(pathname: str) -> bytes:
-    result = get_blob(pathname, access="private")
-    if result is None or result.status_code != 200 or result.stream is None:
-        raise FileNotFoundError(f"Blob not found: {pathname}")
-    return collect_blob_stream(result.stream)
+    request = Request(
+        blob_download_url(pathname),
+        headers={"Authorization": f"Bearer {BLOB_TOKEN}"},
+        method="GET",
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            return response.read()
+    except HTTPError as exc:
+        if exc.code == 404:
+            raise FileNotFoundError(f"Blob not found: {pathname}") from exc
+        detail = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"Blob download failed ({exc.code}): {detail}") from exc
 
 
 def load_dataset_from_reference(source_kind: str, reference: str, filename: str) -> pd.DataFrame:
