@@ -87,7 +87,9 @@
             <h2>Your recent forecasting work</h2>
         </div>
         <p class="supporting-text">
-            {% if recent_analyses %}
+            {% if auth_status.enabled == "true" and not current_user_email %}
+                Sign in to open your private saved reports while keeping the forecasting workflow available to everyone.
+            {% elif recent_analyses %}
                 Reopen one of your saved result sets without uploading the same dataset again.
             {% elif storage_status.mode == "session" %}
                 Durable saved history appears here after Vercel Blob is configured with `BLOB_READ_WRITE_TOKEN`.
@@ -97,7 +99,12 @@
         </p>
     </div>
 
-    {% if recent_analyses %}
+    {% if auth_status.enabled == "true" and not current_user_email %}
+        <div class="history-signin-card">
+            <p>Saved analyses are tied to verified email accounts. Sign in to reopen your private forecasting history.</p>
+            <a class="secondary-link" href="{{ url_for('login', next=url_for('agribusiness_index')) }}">Sign in to view saved reports</a>
+        </div>
+    {% elif recent_analyses %}
         <div class="history-grid">
             {% for analysis in recent_analyses %}
                 <article class="history-card">

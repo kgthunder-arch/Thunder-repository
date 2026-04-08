@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>AgriCast Intelligence</title>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#355e3b" />
+      <stop offset="100%" stop-color="#7a9e53" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="18" fill="url(#bg)" />
+  <path d="M20 40c5-1 8-4 10-9 4 1 7 4 8 9-4 2-8 4-13 4-2 0-4-1-5-4Z" fill="#f0c66e" />
+  <path d="M31 16c8 4 11 12 8 22-8 0-14-4-18-12 2-4 5-8 10-10Z" fill="#edf4ea" />
+</svg>

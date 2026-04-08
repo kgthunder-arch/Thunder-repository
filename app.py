@@ -60,7 +60,7 @@ RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 EMAIL_FROM = os.getenv("EMAIL_FROM") or os.getenv("AUTH_EMAIL_FROM")
 VERIFICATION_CODE_TTL_MINUTES = 10
 VERIFICATION_RESEND_COOLDOWN_SECONDS = 60
-PUBLIC_ENDPOINTS = {"login", "verify_email", "logout"}
+PROTECTED_ENDPOINTS = {"view_saved_analysis"}
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -603,7 +603,7 @@ def load_authenticated_user() -> Any:
 
     if request.endpoint is None or request.endpoint.startswith("static"):
         return None
-    if request.endpoint in PUBLIC_ENDPOINTS:
+    if request.endpoint not in PROTECTED_ENDPOINTS:
         return None
     if not auth_email_enabled():
         return None
@@ -1474,6 +1474,11 @@ def logout() -> Any:
     session.clear()
     flash("You have been signed out.", "warning")
     return redirect(url_for("login"))
+
+
+@app.get("/favicon.ico")
+def favicon() -> Any:
+    return redirect(url_for("static", filename="favicon.svg"), code=302)
 
 
 @app.get("/")

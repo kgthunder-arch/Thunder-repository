@@ -672,6 +672,20 @@ fieldset {
     gap: 10px;
 }
 
+.history-signin-card {
+    display: grid;
+    gap: 14px;
+    padding: 22px;
+    border-radius: 22px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(243, 239, 230, 0.72));
+    border: 1px solid rgba(79, 52, 34, 0.09);
+}
+
+.history-signin-card p {
+    margin: 0;
+    color: rgba(24, 34, 24, 0.75);
+}
+
 .history-card h3 {
     margin: 0;
 }
