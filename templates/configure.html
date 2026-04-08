@@ -29,6 +29,62 @@
     </div>
 </section>
 
+<section class="panel quality-panel">
+    <div class="panel-header">
+        <div>
+            <p class="section-kicker">Dataset Quality</p>
+            <h2>Validate the file before training</h2>
+        </div>
+        <p class="supporting-text">
+            These checks flag missing targets, duplicate rows, missing values, and date-format issues before the models run.
+        </p>
+    </div>
+
+    <div class="stats-row">
+        <div class="stat-card">
+            <strong>{{ summary.validation_report.missing_cell_count }}</strong>
+            <span>Missing Cells</span>
+        </div>
+        <div class="stat-card">
+            <strong>{{ summary.validation_report.duplicate_rows }}</strong>
+            <span>Duplicate Rows</span>
+        </div>
+        <div class="stat-card">
+            <strong>{{ summary.validation_report.parseable_date_columns|length }}</strong>
+            <span>Usable Date Fields</span>
+        </div>
+    </div>
+
+    {% if summary.validation_report.blocking_issues %}
+        <div class="validation-list validation-list-error">
+            <h3>Blocking issues</h3>
+            <ul>
+                {% for issue in summary.validation_report.blocking_issues %}
+                    <li>{{ issue }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    {% if summary.validation_report.warnings %}
+        <div class="validation-list validation-list-warning">
+            <h3>Warnings</h3>
+            <ul>
+                {% for warning in summary.validation_report.warnings %}
+                    <li>{{ warning }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    {% if not summary.validation_report.blocking_issues and not summary.validation_report.warnings %}
+        <div class="insight-card">
+            <h3>Dataset looks ready</h3>
+            <p>No blocking issues were detected in the uploaded file.</p>
+        </div>
+    {% endif %}
+</section>
+
 <section class="panel config-panel">
     <form action="{{ url_for('analyze') }}" method="post" class="config-form">
         <input type="hidden" name="dataset_path" value="{{ summary.path }}">
@@ -115,7 +171,12 @@
             </div>
         </div>
 
-        <button class="primary-button" type="submit">Run Predictive Analysis</button>
+        <button class="primary-button" type="submit" {% if summary.validation_report.blocking_issues %}disabled{% endif %}>
+            Run Predictive Analysis
+        </button>
+        {% if summary.validation_report.blocking_issues %}
+            <small class="form-help">Resolve the blocking dataset issues above before running the models.</small>
+        {% endif %}
     </form>
 </section>
 

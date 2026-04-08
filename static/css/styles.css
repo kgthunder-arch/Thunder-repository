@@ -204,6 +204,11 @@ body {
     color: #7b2d12;
 }
 
+.flash.warning {
+    background: #fff2d6;
+    color: #7a5610;
+}
+
 .content-shell {
     display: grid;
     gap: 22px;
@@ -453,6 +458,12 @@ fieldset {
     max-width: 100%;
 }
 
+.primary-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+    box-shadow: none;
+}
+
 .secondary-link {
     display: inline-flex;
     align-items: center;
@@ -469,6 +480,13 @@ fieldset {
 
 .inline-link {
     margin-left: 8px;
+}
+
+.inline-note,
+.form-help {
+    margin: 0;
+    color: rgba(24, 34, 24, 0.72);
+    font-size: 0.94rem;
 }
 
 .stats-row {
@@ -527,6 +545,54 @@ fieldset {
 .table-card,
 .chart-card {
     padding: 18px;
+}
+
+.validation-list {
+    margin-top: 18px;
+    padding: 18px;
+    border-radius: 22px;
+    border: 1px solid rgba(79, 52, 34, 0.1);
+}
+
+.validation-list h3,
+.explainability-section h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+.validation-list ul {
+    margin: 0;
+    padding-left: 20px;
+    display: grid;
+    gap: 8px;
+}
+
+.validation-list-error {
+    background: rgba(251, 231, 223, 0.8);
+}
+
+.validation-list-warning {
+    background: rgba(255, 242, 214, 0.82);
+}
+
+.explainability-grid {
+    display: grid;
+    gap: 16px;
+    margin-top: 16px;
+    grid-template-columns: 1fr;
+}
+
+.explainability-card {
+    display: grid;
+    gap: 14px;
+    padding: 18px;
+    border-radius: 22px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(243, 239, 230, 0.72));
+    border: 1px solid rgba(79, 52, 34, 0.09);
+}
+
+.compact-header {
+    align-items: flex-start;
 }
 
 .history-grid {
@@ -608,7 +674,8 @@ fieldset {
     .toggle-row,
     .chart-grid,
     .table-grid,
-    .compact-grid {
+    .compact-grid,
+    .explainability-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
@@ -748,7 +815,9 @@ fieldset {
     .insight-card,
     .table-card,
     .chart-card,
-    .history-card {
+    .history-card,
+    .explainability-card,
+    .validation-list {
         padding: 16px;
     }
 
@@ -865,7 +934,9 @@ fieldset {
     .chart-card,
     .table-card,
     .insight-card,
-    .history-card {
+    .history-card,
+    .explainability-card,
+    .validation-list {
         padding: 14px;
     }
 

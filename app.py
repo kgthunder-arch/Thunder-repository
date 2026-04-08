@@ -71,6 +71,20 @@ class DatasetSummary:
     suggestions: dict[str, str]
     source_kind: str
     storage_label: str
+    validation_report: "DatasetValidationReport"
+
+
+@dataclass
+class DatasetValidationReport:
+    blocking_issues: list[str]
+    warnings: list[str]
+    duplicate_rows: int
+    missing_cell_count: int
+    parseable_date_columns: list[str]
+    suspicious_date_columns: list[str]
+    high_missing_columns: list[str]
+    missing_target_types: list[str]
+    non_numeric_target_columns: list[str]
 
 
 @dataclass
@@ -302,6 +316,116 @@ def suggest_targets(columns: list[str]) -> dict[str, str]:
     return suggestions
 
 
+def format_percent(value: float) -> str:
+    return f"{value * 100:.0f}%"
+
+
+def date_column_quality(dataframe: pd.DataFrame) -> tuple[list[str], list[str]]:
+    parseable: list[str] = []
+    suspicious: list[str] = []
+    keywords = ("date", "time")
+
+    for column in dataframe.columns:
+        series = dataframe[column]
+        if pd.api.types.is_datetime64_any_dtype(series):
+            parseable.append(column)
+            continue
+
+        if not pd.api.types.is_object_dtype(series) and not pd.api.types.is_string_dtype(series):
+            continue
+
+        if not any(keyword in column.lower() for keyword in keywords):
+            continue
+
+        non_empty = series.astype("string").str.strip().replace({"": pd.NA})
+        populated = int(non_empty.notna().sum())
+        if populated == 0:
+            continue
+
+        parsed = pd.to_datetime(series, errors="coerce")
+        parse_ratio = float(parsed.notna().sum() / populated)
+        if parse_ratio >= 0.75:
+            parseable.append(column)
+        else:
+            suspicious.append(column)
+
+    return parseable, suspicious
+
+
+def build_validation_report(dataframe: pd.DataFrame, suggestions: dict[str, str]) -> DatasetValidationReport:
+    blocking_issues: list[str] = []
+    warnings: list[str] = []
+
+    if dataframe.empty:
+        blocking_issues.append("The dataset has no rows to analyze.")
+    if dataframe.shape[1] < 2:
+        blocking_issues.append("Add at least two columns so the app has both targets and predictors to work with.")
+
+    numeric_columns = dataframe.select_dtypes(include="number").columns.tolist()
+    if not numeric_columns:
+        blocking_issues.append("No numeric columns were detected. Add numeric yield, price, weather, or demand fields.")
+
+    duplicate_rows = int(dataframe.duplicated().sum())
+    if duplicate_rows:
+        warnings.append(
+            f"{duplicate_rows} duplicate row{'s' if duplicate_rows != 1 else ''} detected. Duplicate records can overstate model confidence."
+        )
+
+    missing_cell_count = int(dataframe.isna().sum().sum())
+    high_missing_columns: list[str] = []
+    for column in dataframe.columns:
+        missing_ratio = float(dataframe[column].isna().mean())
+        if missing_ratio >= 0.2:
+            high_missing_columns.append(f"{column} ({format_percent(missing_ratio)} missing)")
+    if high_missing_columns:
+        warnings.append(
+            "High missing-value columns detected: " + ", ".join(high_missing_columns[:4]) + "."
+        )
+
+    parseable_date_columns, suspicious_date_columns = date_column_quality(dataframe)
+    if suspicious_date_columns:
+        warnings.append(
+            "Date-like columns with inconsistent formatting: " + ", ".join(suspicious_date_columns) + "."
+        )
+
+    missing_target_types = [name.title() for name, column in suggestions.items() if not column]
+    if missing_target_types:
+        warnings.append(
+            "No obvious " + ", ".join(target.lower() for target in missing_target_types) + " target column was detected automatically."
+        )
+
+    non_numeric_target_columns: list[str] = []
+    for forecast_type, column in suggestions.items():
+        if not column:
+            continue
+        populated = dataframe[column].dropna()
+        if populated.empty:
+            non_numeric_target_columns.append(column)
+            continue
+        numeric_ratio = float(pd.to_numeric(populated, errors="coerce").notna().mean())
+        if numeric_ratio < 0.8:
+            non_numeric_target_columns.append(column)
+
+    if non_numeric_target_columns:
+        warnings.append(
+            "Suggested targets that do not look numeric enough for forecasting: "
+            + ", ".join(non_numeric_target_columns)
+            + "."
+        )
+
+    return DatasetValidationReport(
+        blocking_issues=blocking_issues,
+        warnings=warnings,
+        duplicate_rows=duplicate_rows,
+        missing_cell_count=missing_cell_count,
+        parseable_date_columns=parseable_date_columns,
+        suspicious_date_columns=suspicious_date_columns,
+        high_missing_columns=high_missing_columns,
+        missing_target_types=missing_target_types,
+        non_numeric_target_columns=non_numeric_target_columns,
+    )
+
+
 def build_dataset_summary(
     dataframe: pd.DataFrame,
     filename: str,
@@ -315,6 +439,7 @@ def build_dataset_summary(
         justify="left",
     )
     numeric_columns = dataframe.select_dtypes(include="number").columns.tolist()
+    suggestions = suggest_targets(dataframe.columns.tolist())
     return DatasetSummary(
         path=reference,
         filename=filename,
@@ -323,9 +448,10 @@ def build_dataset_summary(
         columns=dataframe.columns.tolist(),
         numeric_columns=numeric_columns,
         preview_html=preview,
-        suggestions=suggest_targets(dataframe.columns.tolist()),
+        suggestions=suggestions,
         source_kind=source_kind,
         storage_label=storage_label_for_source(source_kind),
+        validation_report=build_validation_report(dataframe, suggestions),
     )
 
 
@@ -549,6 +675,121 @@ def calculate_cv_summary(
     }
 
 
+def format_engineered_feature_name(name: str) -> str:
+    cleaned = name.replace("numeric__", "").replace("categorical__", "")
+    cleaned = cleaned.replace("_", " ")
+    for suffix in (" year", " month", " quarter", " day of year"):
+        if cleaned.endswith(suffix):
+            return cleaned
+    return cleaned
+
+
+def create_importance_chart(
+    importance_df: pd.DataFrame,
+    forecast_label: str,
+    model_name: str,
+) -> dict[str, Any]:
+    trimmed = importance_df.head(8).iloc[::-1]
+    return chart_payload(
+        data=[
+            {
+                "type": "bar",
+                "orientation": "h",
+                "x": trimmed["Importance"].round(4).tolist(),
+                "y": trimmed["Feature"].tolist(),
+                "marker": {"color": "#5f8d4e"},
+                "name": "Importance",
+            }
+        ],
+        layout={
+            "title": {"text": f"{forecast_label} Top Drivers ({model_name})"},
+            "xaxis": {"title": {"text": "Relative importance"}},
+            "paper_bgcolor": "rgba(0,0,0,0)",
+            "plot_bgcolor": "rgba(0,0,0,0)",
+            "margin": {"l": 20, "r": 20, "t": 60, "b": 20},
+        },
+    )
+
+
+def build_tree_explainability(
+    pipeline: Pipeline,
+    model_name: str,
+    forecast_label: str,
+) -> dict[str, Any] | None:
+    fitted_model = pipeline.named_steps["model"]
+    importances = getattr(fitted_model, "feature_importances_", None)
+    if importances is None:
+        return None
+
+    feature_names = [
+        format_engineered_feature_name(name)
+        for name in pipeline.named_steps["preprocessor"].get_feature_names_out()
+    ]
+    importance_df = (
+        pd.DataFrame({"Feature": feature_names, "Importance": importances})
+        .sort_values(by="Importance", ascending=False)
+        .head(8)
+        .round(4)
+    )
+    if importance_df.empty:
+        return None
+
+    top_features = importance_df["Feature"].head(3).tolist()
+    if len(top_features) == 1:
+        top_feature_summary = top_features[0]
+    elif len(top_features) == 2:
+        top_feature_summary = f"{top_features[0]} and {top_features[1]}"
+    else:
+        top_feature_summary = f"{', '.join(top_features[:-1])}, and {top_features[-1]}"
+    summary = f"{model_name} leaned most on {top_feature_summary} when scoring this forecast."
+
+    return {
+        "model_name": model_name,
+        "summary": summary,
+        "importance_table": importance_df.to_html(classes="data-table", index=False, border=0, justify="left"),
+        "importance_chart": create_importance_chart(importance_df, forecast_label, model_name),
+    }
+
+
+def validate_selected_columns(
+    dataframe: pd.DataFrame,
+    selected_targets: dict[str, str],
+    feature_columns: list[str],
+) -> list[str]:
+    errors: list[str] = []
+    targets_in_use = [value for value in selected_targets.values() if value]
+
+    if not targets_in_use:
+        errors.append("Select at least one target column for yield, price, or demand.")
+        return errors
+
+    duplicate_targets = [column for column in set(targets_in_use) if targets_in_use.count(column) > 1]
+    if duplicate_targets:
+        errors.append("Each forecast target must use a different dataset column.")
+
+    missing_columns = [column for column in targets_in_use + feature_columns if column not in dataframe.columns]
+    if missing_columns:
+        errors.append("Some selected columns no longer exist in the dataset. Reload the dataset and try again.")
+
+    for forecast_label, target_column in selected_targets.items():
+        if not target_column:
+            continue
+        populated = dataframe[target_column].dropna()
+        if populated.empty:
+            errors.append(f"{forecast_label} target '{target_column}' has no populated values.")
+            continue
+        numeric_ratio = float(pd.to_numeric(populated, errors="coerce").notna().mean())
+        if numeric_ratio < 0.8:
+            errors.append(
+                f"{forecast_label} target '{target_column}' is not numeric enough for model training."
+            )
+
+    if not feature_columns:
+        errors.append("Choose at least one feature column after excluding target variables.")
+
+    return errors
+
+
 def chart_payload(data: list[dict[str, Any]], layout: dict[str, Any]) -> dict[str, Any]:
     return {
         "data": data,
@@ -679,7 +920,9 @@ def analyze_target(
 ) -> dict[str, Any]:
     filtered = dataframe[feature_columns + [target_column]].copy()
     filtered[target_column] = pd.to_numeric(filtered[target_column], errors="coerce")
+    starting_rows = len(filtered)
     filtered = filtered.dropna(subset=[target_column])
+    dropped_target_rows = starting_rows - len(filtered)
 
     feature_frame = expand_datetime_features(filtered[feature_columns])
     target_series = filtered[target_column]
@@ -708,6 +951,7 @@ def analyze_target(
 
     metrics_rows: list[dict[str, Any]] = []
     predictions_by_model: dict[str, pd.DataFrame] = {}
+    explainability_models: list[dict[str, Any]] = []
 
     if use_holdout:
         x_train, x_test, y_train, y_test = train_test_split(
@@ -728,6 +972,9 @@ def analyze_target(
         )
         pipeline.fit(x_train, y_train)
         predictions = pipeline.predict(x_test)
+        explainability = build_tree_explainability(pipeline, model_name, forecast_label)
+        if explainability is not None:
+            explainability_models.append(explainability)
 
         row: dict[str, Any] = {
             "Model": model_name,
@@ -762,6 +1009,7 @@ def analyze_target(
     best_model = ranked_df.iloc[0]["Model"]
     best_row = ranked_df.iloc[0]
     best_predictions = predictions_by_model[best_model]
+    explainability_models.sort(key=lambda item: (item["model_name"] != best_model, item["model_name"]))
 
     metrics_table = ranked_df[
         ["Model", "MAE", "RMSE", "R2", "CV MAE", "CV RMSE", "CV R2"]
@@ -778,6 +1026,8 @@ def analyze_target(
         "metrics_chart": create_metrics_chart(metrics_df, forecast_label),
         "prediction_chart": create_prediction_chart(best_predictions, forecast_label, best_model),
         "scatter_chart": create_scatter_chart(best_predictions, forecast_label, best_model),
+        "explainability_models": explainability_models,
+        "dropped_target_rows": dropped_target_rows,
     }
 
 
@@ -861,17 +1111,21 @@ def analyze() -> str:
         feature_columns = request.form.getlist("feature_columns")
         targets_in_use = [value for value in selected_targets.values() if value]
 
-        if not targets_in_use:
-            flash("Select at least one target column for yield, price, or demand.", "error")
-            return redirect(url_for("agribusiness_index"))
-
         if not feature_columns:
             feature_columns = default_feature_columns(dataframe.columns.tolist(), targets_in_use)
 
         feature_columns = [column for column in feature_columns if column not in targets_in_use]
-        if not feature_columns:
-            flash("Choose at least one feature column after excluding target variables.", "error")
+        validation_errors = validate_selected_columns(dataframe, selected_targets, feature_columns)
+        if validation_errors:
+            flash(" ".join(validation_errors), "error")
             return redirect(url_for("agribusiness_index"))
+
+        duplicate_rows = int(dataframe.duplicated().sum())
+        if duplicate_rows:
+            flash(
+                f"Dataset quality note: {duplicate_rows} duplicate row{'s' if duplicate_rows != 1 else ''} were included in training.",
+                "warning",
+            )
 
         use_holdout = request.form.get("use_holdout") == "on"
         use_cv = request.form.get("use_cv") == "on"

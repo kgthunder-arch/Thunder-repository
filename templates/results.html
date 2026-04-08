@@ -43,6 +43,9 @@
     <div class="insight-card">
         <h3>Recommendation</h3>
         <p>{{ result.recommendation }}</p>
+        {% if result.dropped_target_rows %}
+            <p class="inline-note">{{ result.dropped_target_rows }} row(s) were excluded because the target column could not be read as numeric.</p>
+        {% endif %}
     </div>
 
     <div class="chart-grid">
@@ -57,6 +60,35 @@
     <div class="chart-card full-width-card">
         <div class="plotly-chart" data-chart='{{ result.scatter_chart|tojson|safe }}'></div>
     </div>
+
+    {% if result.explainability_models %}
+    <div class="table-card explainability-section">
+        <h3>Feature Drivers</h3>
+        <p class="supporting-text">
+            Decision Tree and Random Forest expose feature importance, so you can see which inputs had the strongest influence on this forecast.
+        </p>
+
+        <div class="explainability-grid">
+            {% for explanation in result.explainability_models %}
+            <article class="explainability-card">
+                <div class="result-header compact-header">
+                    <div>
+                        <p class="section-kicker">Explainability</p>
+                        <h2>{{ explanation.model_name }}</h2>
+                    </div>
+                </div>
+                <p class="supporting-text">{{ explanation.summary }}</p>
+                <div class="chart-card">
+                    <div class="plotly-chart" data-chart='{{ explanation.importance_chart|tojson|safe }}'></div>
+                </div>
+                <div class="table-shell">
+                    {{ explanation.importance_table|safe }}
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 
     <div class="table-grid">
         <div class="table-card">
