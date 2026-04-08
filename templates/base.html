@@ -12,8 +12,14 @@
         <header class="hero-shell">
             <div class="brand-row">
                 <div class="brand-pill">AgriCast Intelligence</div>
-                <div>
-                    <a href="{{ url_for('agribusiness_index') }}" class="nav-link">New Analysis</a>
+                <div class="nav-actions">
+                    {% if current_user_email %}
+                        <span class="user-pill">{{ current_user_email }}</span>
+                        <a href="{{ url_for('agribusiness_index') }}" class="nav-link">New Analysis</a>
+                        <a href="{{ url_for('logout') }}" class="nav-link">Sign Out</a>
+                    {% else %}
+                        <a href="{{ url_for('login') }}" class="nav-link">Sign In</a>
+                    {% endif %}
                 </div>
             </div>
             <div class="hero-copy">
@@ -35,6 +41,10 @@
                     <div class="hero-point">
                         <span>Validation</span>
                         <strong>Holdout testing plus cross-validation for model trust</strong>
+                    </div>
+                    <div class="hero-point">
+                        <span>Access</span>
+                        <strong>{{ auth_status.label }}</strong>
                     </div>
                 </div>
             </div>

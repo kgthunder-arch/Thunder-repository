@@ -84,15 +84,15 @@
     <div class="panel-header">
         <div>
             <p class="section-kicker">Saved Analyses</p>
-            <h2>Recent forecasting work</h2>
+            <h2>Your recent forecasting work</h2>
         </div>
         <p class="supporting-text">
             {% if recent_analyses %}
-                Reopen a saved result set without uploading the same dataset again.
+                Reopen one of your saved result sets without uploading the same dataset again.
             {% elif storage_status.mode == "session" %}
                 Durable saved history appears here after Vercel Blob is configured with `BLOB_READ_WRITE_TOKEN`.
             {% else %}
-                Run an analysis and the latest saved reports will appear here automatically.
+                Run an analysis and your latest saved reports will appear here automatically.
             {% endif %}
         </p>
     </div>

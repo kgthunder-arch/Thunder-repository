@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel auth-panel">
+    <div class="panel-header">
+        <div>
+            <p class="section-kicker">Email Verification</p>
+            <h2>Enter the code we sent to {{ email }}</h2>
+        </div>
+        <p class="supporting-text">
+            The code expires at {{ expires_at }}. You can also use the verification link from the email for one-tap sign-in.
+        </p>
+    </div>
+
+    <div class="auth-layout">
+        <div class="auth-card">
+            <form action="{{ url_for('verify_email') }}" method="post" class="auth-form">
+                <input type="hidden" name="email" value="{{ email }}">
+                <div class="form-group">
+                    <label for="code">Verification Code</label>
+                    <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="6" required>
+                </div>
+                <button class="primary-button" type="submit">Verify and Enter</button>
+                <p class="form-help">If the email is delayed, check spam first, then request another code from the sign-in page.</p>
+            </form>
+        </div>
+
+        <div class="auth-sidecard">
+            <h3>Trusted access</h3>
+            <div class="auth-steps">
+                <div class="auth-step">
+                    <span>Inbox</span>
+                    <p>Only the real mailbox owner can retrieve the code or link.</p>
+                </div>
+                <div class="auth-step">
+                    <span>Private</span>
+                    <p>Your saved analyses are filtered to your verified account after sign-in.</p>
+                </div>
+                <div class="auth-step">
+                    <span>Fast</span>
+                    <p>You do not need a password reset flow for every new device.</p>
+                </div>
+            </div>
+            <a class="secondary-link" href="{{ url_for('login', email=email) }}">Request Another Email</a>
+        </div>
+    </div>
+</section>
+{% endblock %}

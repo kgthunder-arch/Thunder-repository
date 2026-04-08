@@ -1,21 +1,26 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
+import re
+import secrets
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from functools import wraps
 from io import BytesIO
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError
-from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlunparse
+from urllib.parse import quote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 os.environ.setdefault("JOBLIB_MULTIPROCESSING", "0")
 
 import pandas as pd
-from flask import Flask, flash, redirect, render_template, request, url_for
+from flask import Flask, flash, g, redirect, render_template, request, session, url_for
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import SimpleImputer
@@ -45,18 +50,42 @@ UPLOAD_FOLDER = os.path.join("/tmp", "uploads") if IS_VERCEL else os.path.join(B
 PERSISTENT_STORAGE_DIR = os.path.join(BASE_DIR, "storage")
 PERSISTENT_UPLOADS_DIR = os.path.join(PERSISTENT_STORAGE_DIR, "uploads")
 PERSISTENT_ANALYSES_DIR = os.path.join(PERSISTENT_STORAGE_DIR, "analyses")
+PERSISTENT_AUTH_DIR = os.path.join(PERSISTENT_STORAGE_DIR, "auth")
+PERSISTENT_AUTH_USERS_DIR = os.path.join(PERSISTENT_AUTH_DIR, "users")
+PERSISTENT_AUTH_PENDING_DIR = os.path.join(PERSISTENT_AUTH_DIR, "pending")
 SAMPLE_DATA_PATH = os.path.join(BASE_DIR, "sample_data", "agribusiness_sample.csv")
 ALLOWED_EXTENSIONS = {"csv", "xlsx", "xls"}
 RECENT_ANALYSIS_LIMIT = 4
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+EMAIL_FROM = os.getenv("EMAIL_FROM") or os.getenv("AUTH_EMAIL_FROM")
+VERIFICATION_CODE_TTL_MINUTES = 10
+VERIFICATION_RESEND_COOLDOWN_SECONDS = 60
+PUBLIC_ENDPOINTS = {"login", "verify_email", "logout"}
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 if not IS_VERCEL:
     os.makedirs(PERSISTENT_UPLOADS_DIR, exist_ok=True)
     os.makedirs(PERSISTENT_ANALYSES_DIR, exist_ok=True)
+    os.makedirs(PERSISTENT_AUTH_USERS_DIR, exist_ok=True)
+    os.makedirs(PERSISTENT_AUTH_PENDING_DIR, exist_ok=True)
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "agribusiness-predictive-analysis-secret"
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
+
+def login_required(view: Any) -> Any:
+    @wraps(view)
+    def wrapped_view(*args: Any, **kwargs: Any) -> Any:
+        if not auth_email_enabled():
+            return view(*args, **kwargs)
+        if not current_user_email():
+            target = request.full_path if request.query_string else request.path
+            return redirect(url_for("login", next=verification_redirect_target(target)))
+        return view(*args, **kwargs)
+
+    return wrapped_view
 
 
 @dataclass
@@ -153,6 +182,30 @@ def current_storage_status() -> dict[str, str]:
     }
 
 
+def auth_storage_mode() -> str:
+    if blob_storage_enabled():
+        return "blob"
+    return "local"
+
+
+def auth_email_enabled() -> bool:
+    return bool(RESEND_API_KEY and EMAIL_FROM)
+
+
+def auth_status() -> dict[str, str]:
+    if auth_email_enabled():
+        return {
+            "enabled": "true",
+            "label": "Verified email login is active",
+            "description": "A real verification code and sign-in link will be sent to each user email address.",
+        }
+    return {
+        "enabled": "false",
+        "label": "Email delivery still needs sender setup",
+        "description": "Configure RESEND_API_KEY and EMAIL_FROM with a verified sender address to activate real email verification.",
+    }
+
+
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -201,7 +254,8 @@ def blob_api_json_request(
     )
     try:
         with urlopen(request, timeout=30) as response:
-            return json.loads(response.read().decode("utf-8"))
+            payload = response.read().decode("utf-8")
+            return json.loads(payload) if payload else {}
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")
         raise RuntimeError(f"Blob API request failed ({exc.code}): {detail}") from exc
@@ -287,6 +341,285 @@ def load_blob_bytes(pathname: str) -> bytes:
             raise FileNotFoundError(f"Blob not found: {pathname}") from exc
         detail = exc.read().decode("utf-8", errors="ignore")
         raise RuntimeError(f"Blob download failed ({exc.code}): {detail}") from exc
+
+
+def delete_blob(pathname: str) -> None:
+    blob_api_json_request("DELETE", query={"pathname": pathname})
+
+
+def auth_user_key(email: str) -> str:
+    return hashlib.sha256(email.encode("utf-8")).hexdigest()
+
+
+def auth_user_record_path(email: str) -> str:
+    return os.path.join(PERSISTENT_AUTH_USERS_DIR, f"{auth_user_key(email)}.json")
+
+
+def auth_pending_record_path(email: str) -> str:
+    return os.path.join(PERSISTENT_AUTH_PENDING_DIR, f"{auth_user_key(email)}.json")
+
+
+def auth_blob_user_path(email: str) -> str:
+    return f"auth/users/{auth_user_key(email)}.json"
+
+
+def auth_blob_pending_path(email: str) -> str:
+    return f"auth/pending/{auth_user_key(email)}.json"
+
+
+def save_json_record(record_path: str, payload: dict[str, Any], *, content_type: str = "application/json") -> None:
+    serialized = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+    if auth_storage_mode() == "blob":
+        put_blob(
+            record_path,
+            serialized,
+            access="private",
+            add_random_suffix=False,
+            content_type=content_type,
+            overwrite=True,
+        )
+        return
+
+    os.makedirs(os.path.dirname(record_path), exist_ok=True)
+    with open(record_path, "wb") as output_file:
+        output_file.write(serialized)
+
+
+def load_json_record(record_path: str) -> dict[str, Any] | None:
+    try:
+        if auth_storage_mode() == "blob":
+            raw_bytes = load_blob_bytes(record_path)
+        else:
+            if not os.path.exists(record_path):
+                return None
+            with open(record_path, "rb") as input_file:
+                raw_bytes = input_file.read()
+    except FileNotFoundError:
+        return None
+
+    return json.loads(raw_bytes.decode("utf-8"))
+
+
+def delete_json_record(record_path: str) -> None:
+    if auth_storage_mode() == "blob":
+        try:
+            delete_blob(record_path)
+        except RuntimeError:
+            return
+        return
+
+    if os.path.exists(record_path):
+        os.remove(record_path)
+
+
+def normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def valid_email_address(email: str) -> bool:
+    return bool(EMAIL_PATTERN.match(email))
+
+
+def hash_secret(secret_value: str) -> str:
+    return hashlib.sha256(secret_value.encode("utf-8")).hexdigest()
+
+
+def auth_user_record(email: str) -> dict[str, Any] | None:
+    record_path = auth_blob_user_path(email) if auth_storage_mode() == "blob" else auth_user_record_path(email)
+    return load_json_record(record_path)
+
+
+def save_auth_user(email: str, payload: dict[str, Any]) -> dict[str, Any]:
+    existing = auth_user_record(email) or {}
+    created_at = existing.get("created_at") or utc_now().isoformat()
+    record = {
+        "email": email,
+        "created_at": created_at,
+        "verified_at": existing.get("verified_at") or payload.get("verified_at") or utc_now().isoformat(),
+        "last_login_at": payload.get("last_login_at") or utc_now().isoformat(),
+        "login_count": int(existing.get("login_count", 0)) + 1,
+    }
+    record_path = auth_blob_user_path(email) if auth_storage_mode() == "blob" else auth_user_record_path(email)
+    save_json_record(record_path, record)
+    return record
+
+
+def pending_auth_record(email: str) -> dict[str, Any] | None:
+    record_path = auth_blob_pending_path(email) if auth_storage_mode() == "blob" else auth_pending_record_path(email)
+    return load_json_record(record_path)
+
+
+def save_pending_auth(email: str, payload: dict[str, Any]) -> None:
+    record_path = auth_blob_pending_path(email) if auth_storage_mode() == "blob" else auth_pending_record_path(email)
+    save_json_record(record_path, payload)
+
+
+def clear_pending_auth(email: str) -> None:
+    record_path = auth_blob_pending_path(email) if auth_storage_mode() == "blob" else auth_pending_record_path(email)
+    delete_json_record(record_path)
+
+
+def verification_expiry_iso() -> str:
+    return utc_now().replace(microsecond=0).isoformat()
+
+
+def current_user_email() -> str | None:
+    return getattr(g, "current_user_email", None)
+
+
+def verification_redirect_target(raw_target: str | None) -> str:
+    if not raw_target:
+        return url_for("agribusiness_index")
+    parsed = urlparse(raw_target)
+    if parsed.scheme or parsed.netloc or not parsed.path.startswith("/"):
+        return url_for("agribusiness_index")
+    return raw_target
+
+
+def current_app_base_url() -> str:
+    configured = os.getenv("APP_BASE_URL")
+    if configured:
+        return configured.rstrip("/")
+    if request.host_url:
+        return request.host_url.rstrip("/")
+    return "http://127.0.0.1:5000"
+
+
+def resend_email_request(to_email: str, subject: str, html: str, text: str) -> None:
+    if not auth_email_enabled():
+        raise RuntimeError(
+            "Real email delivery is not configured yet. Set RESEND_API_KEY and EMAIL_FROM with a verified sender address."
+        )
+
+    request = Request(
+        "https://api.resend.com/emails",
+        data=json.dumps(
+            {
+                "from": EMAIL_FROM,
+                "to": [to_email],
+                "subject": subject,
+                "html": html,
+                "text": text,
+            }
+        ).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {RESEND_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            response.read()
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"Verification email could not be sent ({exc.code}): {detail}") from exc
+
+
+def build_verification_email(email: str, code: str, link: str) -> tuple[str, str]:
+    html = f"""
+    <div style="background:#f3ecdd;padding:32px 16px;font-family:Trebuchet MS,Segoe UI,sans-serif;color:#182218;">
+        <div style="max-width:560px;margin:0 auto;background:#fffaf3;border-radius:24px;padding:32px;border:1px solid rgba(79,52,34,0.12);">
+            <p style="margin:0 0 10px;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:#355e3b;">AgriCast Intelligence</p>
+            <h1 style="margin:0 0 14px;font-family:Georgia,Times New Roman,serif;font-size:32px;line-height:1.1;color:#182218;">Verify your email to enter the forecasting workspace</h1>
+            <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#4f3422;">Use the code below or tap the verification button. This email was requested for {email}.</p>
+            <div style="margin:0 0 20px;padding:18px 22px;border-radius:18px;background:#edf4ea;border:1px solid rgba(53,94,59,0.12);font-size:30px;font-weight:700;letter-spacing:0.18em;text-align:center;color:#355e3b;">{code}</div>
+            <p style="margin:0 0 24px;text-align:center;">
+                <a href="{link}" style="display:inline-block;padding:14px 24px;border-radius:999px;background:#355e3b;color:#f8f6f0;text-decoration:none;font-weight:700;">Verify Email</a>
+            </p>
+            <p style="margin:0;font-size:14px;line-height:1.6;color:#6b5b4d;">This link and code expire in {VERIFICATION_CODE_TTL_MINUTES} minutes.</p>
+        </div>
+    </div>
+    """
+    text = (
+        f"Verify your AgriCast Intelligence login.\n\n"
+        f"Verification code: {code}\n"
+        f"Verification link: {link}\n\n"
+        f"This code expires in {VERIFICATION_CODE_TTL_MINUTES} minutes."
+    )
+    return html, text
+
+
+def create_pending_verification(email: str, next_target: str) -> dict[str, Any]:
+    existing = pending_auth_record(email)
+    now = utc_now()
+    if existing is not None:
+        last_sent_at = datetime.fromisoformat(existing["last_sent_at"])
+        elapsed_seconds = (now - last_sent_at).total_seconds()
+        if elapsed_seconds < VERIFICATION_RESEND_COOLDOWN_SECONDS:
+            wait_seconds = int(VERIFICATION_RESEND_COOLDOWN_SECONDS - elapsed_seconds)
+            raise RuntimeError(f"Please wait {wait_seconds} second(s) before requesting another code.")
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    token = secrets.token_urlsafe(24)
+    expires_at = now.replace(microsecond=0) + timedelta(minutes=VERIFICATION_CODE_TTL_MINUTES)
+    record = {
+        "email": email,
+        "code_hash": hash_secret(code),
+        "token_hash": hash_secret(token),
+        "created_at": now.isoformat(),
+        "last_sent_at": now.isoformat(),
+        "expires_at": expires_at.isoformat(),
+        "next_target": verification_redirect_target(next_target),
+    }
+    save_pending_auth(email, record)
+    return {"code": code, "token": token, "record": record}
+
+
+def pending_verification_valid(record: dict[str, Any]) -> bool:
+    return utc_now() <= datetime.fromisoformat(record["expires_at"])
+
+
+def complete_verified_login(email: str) -> str:
+    pending = pending_auth_record(email)
+    if pending is None or not pending_verification_valid(pending):
+        clear_pending_auth(email)
+        raise RuntimeError("That verification request has expired. Request a new code and try again.")
+
+    user_record = save_auth_user(
+        email,
+        {
+            "verified_at": utc_now().isoformat(),
+            "last_login_at": utc_now().isoformat(),
+        },
+    )
+    clear_pending_auth(email)
+    session["user_email"] = user_record["email"]
+    session["user_verified_at"] = user_record["verified_at"]
+    return pending.get("next_target", url_for("agribusiness_index"))
+
+
+@app.before_request
+def load_authenticated_user() -> Any:
+    g.current_user_email = None
+    user_email = normalize_email(session.get("user_email", "")) if session.get("user_email") else None
+    if user_email:
+        record = auth_user_record(user_email)
+        if record is None:
+            session.clear()
+        else:
+            g.current_user_email = record["email"]
+            g.current_user = record
+
+    if request.endpoint is None or request.endpoint.startswith("static"):
+        return None
+    if request.endpoint in PUBLIC_ENDPOINTS:
+        return None
+    if not auth_email_enabled():
+        return None
+    if g.current_user_email:
+        return None
+
+    target = request.full_path if request.query_string else request.path
+    return redirect(url_for("login", next=verification_redirect_target(target)))
+
+
+@app.context_processor
+def auth_template_context() -> dict[str, Any]:
+    return {
+        "current_user_email": current_user_email(),
+        "auth_status": auth_status(),
+    }
 
 
 def load_dataset_from_reference(source_kind: str, reference: str, filename: str) -> pd.DataFrame:
@@ -504,6 +837,7 @@ def save_analysis_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
         "saved_at": saved_at,
         "storage_mode": storage_mode,
         "storage_label": storage_label_for_source(storage_mode),
+        "user_email": current_user_email(),
         **payload,
     }
     serialized = json.dumps(record, ensure_ascii=True).encode("utf-8")
@@ -538,12 +872,18 @@ def load_analysis_snapshot(analysis_id: str) -> dict[str, Any] | None:
     except FileNotFoundError:
         return None
 
-    return json.loads(raw_bytes.decode("utf-8"))
+    snapshot = json.loads(raw_bytes.decode("utf-8"))
+    if auth_email_enabled() and snapshot.get("user_email") != current_user_email():
+        return None
+    return snapshot
 
 
 def recent_saved_analyses(limit: int = RECENT_ANALYSIS_LIMIT) -> list[SavedAnalysisSummary]:
     storage_mode = active_storage_mode()
     records: list[dict[str, Any]] = []
+    signed_in_user = current_user_email()
+    if auth_email_enabled() and not signed_in_user:
+        return []
 
     if storage_mode == "blob":
         listing = list_objects(prefix="analyses/", limit=50)
@@ -565,6 +905,8 @@ def recent_saved_analyses(limit: int = RECENT_ANALYSIS_LIMIT) -> list[SavedAnaly
     else:
         return []
 
+    if auth_email_enabled():
+        records = [record for record in records if record.get("user_email") == signed_in_user]
     records.sort(key=lambda item: item.get("saved_at", ""), reverse=True)
     summaries: list[SavedAnalysisSummary] = []
     for record in records[:limit]:
@@ -1034,6 +1376,104 @@ def analyze_target(
 def default_feature_columns(columns: list[str], selected_targets: list[str]) -> list[str]:
     excluded = set(selected_targets)
     return [column for column in columns if column not in excluded]
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login() -> str:
+    if current_user_email():
+        return redirect(url_for("agribusiness_index"))
+
+    next_target = verification_redirect_target(request.values.get("next"))
+    email_prefill = normalize_email(request.values.get("email", ""))
+    if request.method == "POST":
+        if not auth_email_enabled():
+            flash(auth_status()["description"], "warning")
+            return render_template("login.html", next_target=next_target, email=email_prefill)
+
+        email = normalize_email(request.form.get("email", ""))
+        if not valid_email_address(email):
+            flash("Enter a valid email address to receive a real verification message.", "error")
+            return render_template("login.html", next_target=next_target, email=email)
+
+        try:
+            verification = create_pending_verification(email, next_target)
+            verification_link = (
+                f"{current_app_base_url()}{url_for('verify_email')}"
+                f"?email={quote(email)}&token={quote(verification['token'])}"
+            )
+            html, text = build_verification_email(email, verification["code"], verification_link)
+            resend_email_request(email, "Verify your AgriCast Intelligence login", html, text)
+            flash(f"We sent a verification code to {email}. Check your inbox and spam folder.", "warning")
+            return redirect(url_for("verify_email", email=email))
+        except Exception as exc:
+            clear_pending_auth(email)
+            flash(str(exc), "error")
+
+        return render_template("login.html", next_target=next_target, email=email)
+
+    return render_template("login.html", next_target=next_target, email=email_prefill)
+
+
+@app.route("/verify", methods=["GET", "POST"])
+def verify_email() -> str:
+    if current_user_email():
+        return redirect(url_for("agribusiness_index"))
+    if not auth_email_enabled():
+        flash(auth_status()["description"], "warning")
+        return redirect(url_for("login"))
+
+    email = normalize_email(request.values.get("email", ""))
+    pending = pending_auth_record(email) if email else None
+    token = request.values.get("token", "").strip()
+
+    if token and pending is not None:
+        if not pending_verification_valid(pending):
+            clear_pending_auth(email)
+            flash("That verification link has expired. Request a fresh email code.", "error")
+            return redirect(url_for("login"))
+        if hmac.compare_digest(hash_secret(token), pending.get("token_hash", "")):
+            try:
+                flash("Email verified. You are now signed in.", "warning")
+                return redirect(complete_verified_login(email))
+            except Exception as exc:
+                flash(str(exc), "error")
+                return redirect(url_for("login"))
+
+    if request.method == "POST":
+        code = request.form.get("code", "").strip()
+        if not email or pending is None:
+            flash("Start from the login page so we can send you a valid verification code.", "error")
+            return redirect(url_for("login"))
+        if not pending_verification_valid(pending):
+            clear_pending_auth(email)
+            flash("That verification code has expired. Request a new one.", "error")
+            return redirect(url_for("login"))
+        if not hmac.compare_digest(hash_secret(code), pending.get("code_hash", "")):
+            flash("That verification code does not match the latest email we sent.", "error")
+            return render_template(
+                "verify.html",
+                email=email,
+                expires_at=humanize_timestamp(pending.get("expires_at", "")),
+            )
+        flash("Email verified. You are now signed in.", "warning")
+        return redirect(complete_verified_login(email))
+
+    if not email or pending is None:
+        flash("Request a verification email before trying to sign in.", "error")
+        return redirect(url_for("login"))
+
+    return render_template(
+        "verify.html",
+        email=email,
+        expires_at=humanize_timestamp(pending.get("expires_at", "")),
+    )
+
+
+@app.get("/logout")
+def logout() -> Any:
+    session.clear()
+    flash("You have been signed out.", "warning")
+    return redirect(url_for("login"))
 
 
 @app.get("/")

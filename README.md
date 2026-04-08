@@ -45,7 +45,23 @@ python app.py
 - Vercel without `BLOB_READ_WRITE_TOKEN`:
   uploads use temporary runtime storage only
 
+## Email Login Setup
+
+The app now supports passwordless email verification.
+
+Required environment variables:
+
+- `RESEND_API_KEY`: Resend API key used to send verification emails
+- `EMAIL_FROM`: verified sender address, for example `AgriCast Intelligence <login@yourdomain.com>`
+- `APP_BASE_URL`: optional public base URL used in verification links
+
+Notes:
+
+- `EMAIL_FROM` must be a verified sender/domain in Resend if you want emails to reach real external inboxes.
+- Without `RESEND_API_KEY` and `EMAIL_FROM`, the login page stays visible but real verification emails cannot be sent.
+
 ## Notes
 
 - Saved analyses can be reopened from the homepage history section.
+- Saved analyses are now scoped to the signed-in verified email account.
 - `storage/` is ignored by Git so local saved uploads and reports stay out of the repository.

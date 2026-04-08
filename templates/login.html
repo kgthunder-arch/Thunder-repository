@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel auth-panel">
+    <div class="panel-header">
+        <div>
+            <p class="section-kicker">Secure Access</p>
+            <h2>Sign in with your real email address</h2>
+        </div>
+        <p class="supporting-text">
+            We send a one-time verification code and direct sign-in link to your inbox. No fake emails, no shared guest access.
+        </p>
+    </div>
+
+    <div class="auth-layout">
+        <div class="auth-card">
+            <form action="{{ url_for('login') }}" method="post" class="auth-form">
+                <input type="hidden" name="next" value="{{ next_target }}">
+                <div class="form-group">
+                    <label for="email">Work Email</label>
+                    <input id="email" name="email" type="email" value="{{ email }}" placeholder="you@company.com" autocomplete="email" required>
+                </div>
+                <button class="primary-button" type="submit">Send Verification Email</button>
+                <p class="form-help">{{ auth_status.description }}</p>
+            </form>
+        </div>
+
+        <div class="auth-sidecard">
+            <h3>What happens next</h3>
+            <div class="auth-steps">
+                <div class="auth-step">
+                    <span>01</span>
+                    <p>Enter the email address you actually control.</p>
+                </div>
+                <div class="auth-step">
+                    <span>02</span>
+                    <p>Open the verification email and either tap the sign-in link or copy the code.</p>
+                </div>
+                <div class="auth-step">
+                    <span>03</span>
+                    <p>Access only your saved agribusiness analyses after verification succeeds.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
