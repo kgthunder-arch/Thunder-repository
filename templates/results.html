@@ -15,6 +15,58 @@
     </div>
 </section>
 
+{% if result_overview %}
+<section class="panel summary-panel">
+    <div class="panel-header">
+        <div>
+            <p class="section-kicker">Executive Summary</p>
+            <h2>Best-model snapshot across all selected targets</h2>
+        </div>
+        {% if analysis_summary %}
+        <div class="analysis-actions">
+            <a class="secondary-link" href="{{ url_for('export_analysis_json', analysis_id=analysis_summary.analysis_id) }}">Download JSON</a>
+            <a class="secondary-link" href="{{ url_for('export_analysis_metrics_csv', analysis_id=analysis_summary.analysis_id) }}">Download Metrics CSV</a>
+            <a class="secondary-link" href="{{ url_for('export_analysis_forecasts_csv', analysis_id=analysis_summary.analysis_id) }}">Download Forecast CSV</a>
+            <form action="{{ url_for('delete_saved_analysis', analysis_id=analysis_summary.analysis_id) }}" method="post" class="inline-form" data-confirm="Delete this saved analysis from storage?">
+                <button class="secondary-button danger-button" type="submit">Delete Saved Analysis</button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="stats-row">
+        <div class="stat-card">
+            <strong>{{ result_overview.target_count }}</strong>
+            <span>Forecast Tracks</span>
+        </div>
+        <div class="stat-card">
+            <strong>{{ result_overview.leading_model }}</strong>
+            <span>Most Frequent Best Model ({{ result_overview.leading_model_count }})</span>
+        </div>
+        <div class="stat-card">
+            <strong>{% if result_overview.average_r2 is not none %}{{ "%.3f"|format(result_overview.average_r2) }}{% else %}N/A{% endif %}</strong>
+            <span>Average Best-Model R²</span>
+        </div>
+    </div>
+
+    <div class="summary-grid">
+        {% for item in result_overview.summary_cards %}
+        <article class="summary-card">
+            <p class="section-kicker">{{ item.target_column }}</p>
+            <h3>{{ item.forecast_label }}</h3>
+            <p class="summary-model">{{ item.best_model }}{% if item.runner_up_model %} ahead of {{ item.runner_up_model }}{% endif %}</p>
+            <p class="summary-metrics">
+                MAE {{ "%.3f"|format(item.best_metrics["MAE"]) }},
+                RMSE {{ "%.3f"|format(item.best_metrics["RMSE"]) }},
+                R² {{ "%.3f"|format(item.best_metrics["R2"]) }}
+            </p>
+            <p>{{ item.recommendation }}</p>
+        </article>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
 {% if analysis_summary %}
 <section class="panel storage-panel">
     <div class="panel-header">

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import hmac
 import json
@@ -7,10 +8,11 @@ import os
 import re
 import secrets
 import uuid
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import wraps
-from io import BytesIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError
@@ -20,7 +22,7 @@ from urllib.request import Request, urlopen
 os.environ.setdefault("JOBLIB_MULTIPROCESSING", "0")
 
 import pandas as pd
-from flask import Flask, flash, g, redirect, render_template, request, session, url_for
+from flask import Flask, Response, flash, g, redirect, render_template, request, session, url_for
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import SimpleImputer
@@ -60,7 +62,13 @@ RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 EMAIL_FROM = os.getenv("EMAIL_FROM") or os.getenv("AUTH_EMAIL_FROM")
 VERIFICATION_CODE_TTL_MINUTES = 10
 VERIFICATION_RESEND_COOLDOWN_SECONDS = 60
-PROTECTED_ENDPOINTS = {"view_saved_analysis"}
+PROTECTED_ENDPOINTS = {
+    "view_saved_analysis",
+    "export_analysis_json",
+    "export_analysis_metrics_csv",
+    "export_analysis_forecasts_csv",
+    "delete_saved_analysis",
+}
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -878,6 +886,26 @@ def load_analysis_snapshot(analysis_id: str) -> dict[str, Any] | None:
     return snapshot
 
 
+def delete_analysis_snapshot(analysis_id: str) -> bool:
+    snapshot = load_analysis_snapshot(analysis_id)
+    if snapshot is None:
+        return False
+
+    storage_mode = snapshot.get("storage_mode", active_storage_mode())
+    if storage_mode == "blob":
+        try:
+            delete_blob(f"analyses/{analysis_id}.json")
+        except RuntimeError:
+            return False
+        return True
+
+    snapshot_path = local_analysis_path(analysis_id) if storage_mode == "local" else session_analysis_path(analysis_id)
+    if not os.path.exists(snapshot_path):
+        return False
+    os.remove(snapshot_path)
+    return True
+
+
 def recent_saved_analyses(limit: int = RECENT_ANALYSIS_LIMIT) -> list[SavedAnalysisSummary]:
     storage_mode = active_storage_mode()
     records: list[dict[str, Any]] = []
@@ -924,6 +952,126 @@ def recent_saved_analyses(limit: int = RECENT_ANALYSIS_LIMIT) -> list[SavedAnaly
             )
         )
     return summaries
+
+
+def records_for_json(dataframe: pd.DataFrame) -> list[dict[str, Any]]:
+    cleaned = dataframe.astype(object).where(pd.notna(dataframe), None)
+    return cleaned.to_dict(orient="records")
+
+
+def parse_table_rows(table_html: str | None) -> list[dict[str, Any]]:
+    if not table_html:
+        return []
+    try:
+        tables = pd.read_html(StringIO(table_html))
+    except ValueError:
+        return []
+    if not tables:
+        return []
+    return records_for_json(tables[0])
+
+
+def build_result_overview(results: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not results:
+        return None
+
+    model_counts: Counter[str] = Counter()
+    r2_values: list[float] = []
+    summary_cards: list[dict[str, Any]] = []
+
+    for result in results:
+        best_model = result.get("best_model", "Model")
+        best_metrics = result.get("best_metrics", {})
+        model_counts[best_model] += 1
+        if best_metrics.get("R2") is not None:
+            r2_values.append(float(best_metrics["R2"]))
+        summary_cards.append(
+            {
+                "forecast_label": result.get("forecast_label", "Forecast"),
+                "target_column": result.get("target_column", ""),
+                "best_model": best_model,
+                "runner_up_model": result.get("runner_up_model"),
+                "recommendation": result.get("recommendation", ""),
+                "best_metrics": best_metrics,
+            }
+        )
+
+    leading_model, leading_count = model_counts.most_common(1)[0]
+    average_r2 = round(sum(r2_values) / len(r2_values), 3) if r2_values else None
+    return {
+        "target_count": len(results),
+        "leading_model": leading_model,
+        "leading_model_count": leading_count,
+        "average_r2": average_r2,
+        "summary_cards": summary_cards,
+    }
+
+
+def export_filename(base_name: str, suffix: str, extension: str) -> str:
+    stem = secure_filename(Path(base_name).stem) or "analysis"
+    return f"{stem}-{suffix}.{extension}"
+
+
+def analysis_export_json(snapshot: dict[str, Any]) -> Response:
+    body = json.dumps(snapshot, indent=2, ensure_ascii=True)
+    filename = export_filename(snapshot.get("filename", "analysis"), "analysis", "json")
+    return Response(
+        body,
+        mimetype="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def metrics_export_rows(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for result in snapshot.get("results", []):
+        metric_rows = result.get("metrics_rows") or parse_table_rows(result.get("metrics_table"))
+        for item in metric_rows:
+            rows.append(
+                {
+                    "Forecast": result.get("forecast_label", ""),
+                    "Target Column": result.get("target_column", ""),
+                    "Model": item.get("Model"),
+                    "MAE": item.get("MAE"),
+                    "RMSE": item.get("RMSE"),
+                    "R2": item.get("R2"),
+                    "CV MAE": item.get("CV MAE"),
+                    "CV RMSE": item.get("CV RMSE"),
+                    "CV R2": item.get("CV R2"),
+                }
+            )
+    return rows
+
+
+def prediction_export_rows(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for result in snapshot.get("results", []):
+        prediction_rows = result.get("prediction_rows") or parse_table_rows(result.get("predictions_table"))
+        for item in prediction_rows:
+            rows.append(
+                {
+                    "Forecast": result.get("forecast_label", ""),
+                    "Target Column": result.get("target_column", ""),
+                    "Best Model": result.get("best_model"),
+                    "Record": item.get("Record"),
+                    "Actual": item.get("Actual"),
+                    "Predicted": item.get("Predicted"),
+                    "Residual": item.get("Residual"),
+                }
+            )
+    return rows
+
+
+def csv_download_response(rows: list[dict[str, Any]], filename: str, fieldnames: list[str]) -> Response:
+    output = StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(rows)
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def expand_datetime_features(dataframe: pd.DataFrame) -> pd.DataFrame:
@@ -1357,14 +1505,26 @@ def analyze_target(
         ["Model", "MAE", "RMSE", "R2", "CV MAE", "CV RMSE", "CV R2"]
     ].to_html(classes="data-table", index=False, border=0, justify="left")
     predictions_table = best_predictions.to_html(classes="data-table", index=False, border=0, justify="left")
+    runner_up_model = ranked_df.iloc[1]["Model"] if len(ranked_df.index) > 1 else None
 
     return {
         "forecast_label": forecast_label,
         "target_column": target_column,
         "best_model": best_model,
+        "runner_up_model": runner_up_model,
+        "best_metrics": {
+            "MAE": float(best_row["MAE"]),
+            "RMSE": float(best_row["RMSE"]),
+            "R2": float(best_row["R2"]),
+            "CV MAE": None if pd.isna(best_row.get("CV MAE")) else float(best_row["CV MAE"]),
+            "CV RMSE": None if pd.isna(best_row.get("CV RMSE")) else float(best_row["CV RMSE"]),
+            "CV R2": None if pd.isna(best_row.get("CV R2")) else float(best_row["CV R2"]),
+        },
         "recommendation": recommendation_text(forecast_label, best_row, use_holdout, use_cv),
         "metrics_table": metrics_table,
+        "metrics_rows": records_for_json(ranked_df[["Model", "MAE", "RMSE", "R2", "CV MAE", "CV RMSE", "CV R2"]]),
         "predictions_table": predictions_table,
+        "prediction_rows": records_for_json(best_predictions),
         "metrics_chart": create_metrics_chart(metrics_df, forecast_label),
         "prediction_chart": create_prediction_chart(best_predictions, forecast_label, best_model),
         "scatter_chart": create_scatter_chart(best_predictions, forecast_label, best_model),
@@ -1506,12 +1666,72 @@ def view_saved_analysis(analysis_id: str) -> str:
         use_holdout=snapshot["use_holdout"],
         use_cv=snapshot["use_cv"],
         feature_columns=snapshot["feature_columns"],
+        result_overview=build_result_overview(snapshot["results"]),
         analysis_summary={
             "analysis_id": snapshot["analysis_id"],
             "saved_at_label": humanize_timestamp(snapshot["saved_at"]),
             "storage_label": snapshot["storage_label"],
         },
     )
+
+
+@app.get("/analysis/<analysis_id>/export/json")
+def export_analysis_json(analysis_id: str) -> Response | Any:
+    snapshot = load_analysis_snapshot(analysis_id)
+    if snapshot is None:
+        flash("That saved analysis is no longer available for export.", "error")
+        return redirect(url_for("agribusiness_index"))
+    return analysis_export_json(snapshot)
+
+
+@app.get("/analysis/<analysis_id>/export/metrics.csv")
+def export_analysis_metrics_csv(analysis_id: str) -> Response | Any:
+    snapshot = load_analysis_snapshot(analysis_id)
+    if snapshot is None:
+        flash("That saved analysis is no longer available for export.", "error")
+        return redirect(url_for("agribusiness_index"))
+
+    rows = metrics_export_rows(snapshot)
+    if not rows:
+        flash("Metrics export is not available for this saved analysis yet.", "error")
+        return redirect(url_for("view_saved_analysis", analysis_id=analysis_id))
+
+    filename = export_filename(snapshot.get("filename", "analysis"), "metrics", "csv")
+    return csv_download_response(
+        rows,
+        filename,
+        ["Forecast", "Target Column", "Model", "MAE", "RMSE", "R2", "CV MAE", "CV RMSE", "CV R2"],
+    )
+
+
+@app.get("/analysis/<analysis_id>/export/forecasts.csv")
+def export_analysis_forecasts_csv(analysis_id: str) -> Response | Any:
+    snapshot = load_analysis_snapshot(analysis_id)
+    if snapshot is None:
+        flash("That saved analysis is no longer available for export.", "error")
+        return redirect(url_for("agribusiness_index"))
+
+    rows = prediction_export_rows(snapshot)
+    if not rows:
+        flash("Forecast export is not available for this saved analysis yet.", "error")
+        return redirect(url_for("view_saved_analysis", analysis_id=analysis_id))
+
+    filename = export_filename(snapshot.get("filename", "analysis"), "forecasts", "csv")
+    return csv_download_response(
+        rows,
+        filename,
+        ["Forecast", "Target Column", "Best Model", "Record", "Actual", "Predicted", "Residual"],
+    )
+
+
+@app.post("/analysis/<analysis_id>/delete")
+def delete_saved_analysis(analysis_id: str) -> Any:
+    if not delete_analysis_snapshot(analysis_id):
+        flash("That saved analysis could not be deleted.", "error")
+        return redirect(url_for("agribusiness_index"))
+
+    flash("Saved analysis deleted.", "warning")
+    return redirect(url_for("agribusiness_index"))
 
 
 @app.post("/upload")
@@ -1630,6 +1850,7 @@ def analyze() -> str:
         use_holdout=use_holdout,
         use_cv=use_cv,
         feature_columns=feature_columns,
+        result_overview=build_result_overview(results),
         analysis_summary=analysis_summary,
     )
 

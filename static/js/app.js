@@ -35,6 +35,15 @@ if (testSize && testSizeValue) {
     testSize.addEventListener("input", updateTestLabel);
 }
 
+document.querySelectorAll("form[data-confirm]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+        const message = form.getAttribute("data-confirm") || "Are you sure?";
+        if (!window.confirm(message)) {
+            event.preventDefault();
+        }
+    });
+});
+
 const resizePlotlyCharts = () => {
     if (!window.Plotly) {
         return;

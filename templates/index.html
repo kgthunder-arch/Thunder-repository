@@ -113,7 +113,13 @@
                     <p class="history-storage">{{ analysis.storage_label }}</p>
                     <p class="history-targets">{{ analysis.targets|join(", ") }}</p>
                     <p class="history-models">{{ analysis.best_models|join(" | ") }}</p>
-                    <a class="secondary-link" href="{{ url_for('view_saved_analysis', analysis_id=analysis.analysis_id) }}">Open saved report</a>
+                    <div class="history-actions">
+                        <a class="secondary-link" href="{{ url_for('view_saved_analysis', analysis_id=analysis.analysis_id) }}">Open saved report</a>
+                        <a class="secondary-link" href="{{ url_for('export_analysis_metrics_csv', analysis_id=analysis.analysis_id) }}">Metrics CSV</a>
+                        <form action="{{ url_for('delete_saved_analysis', analysis_id=analysis.analysis_id) }}" method="post" class="inline-form" data-confirm="Delete this saved analysis from storage?">
+                            <button class="secondary-button danger-button" type="submit">Delete</button>
+                        </form>
+                    </div>
                 </article>
             {% endfor %}
         </div>

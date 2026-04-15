@@ -327,9 +327,14 @@ body {
 
 .upload-form,
 .config-form,
-.auth-form {
+.auth-form,
+.inline-form {
     display: grid;
     gap: 18px;
+}
+
+.inline-form {
+    gap: 0;
 }
 
 .source-grid,
@@ -545,6 +550,23 @@ fieldset {
     font-weight: 700;
 }
 
+.secondary-button {
+    border: 1px solid rgba(53, 94, 59, 0.18);
+    border-radius: 999px;
+    padding: 11px 16px;
+    background: rgba(255, 255, 255, 0.82);
+    color: var(--leaf);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.danger-button {
+    color: #8a2f23;
+    border-color: rgba(138, 47, 35, 0.18);
+    background: rgba(251, 231, 223, 0.72);
+}
+
 .inline-link {
     margin-left: 8px;
 }
@@ -672,6 +694,50 @@ fieldset {
     gap: 10px;
 }
 
+.history-actions,
+.analysis-actions,
+.summary-grid {
+    display: grid;
+    gap: 12px;
+}
+
+.history-actions {
+    grid-template-columns: 1fr;
+}
+
+.analysis-actions {
+    width: 100%;
+    grid-template-columns: 1fr;
+}
+
+.summary-grid {
+    margin-top: 18px;
+    grid-template-columns: 1fr;
+}
+
+.summary-card {
+    border-radius: 22px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(243, 239, 230, 0.72));
+    border: 1px solid rgba(79, 52, 34, 0.09);
+    padding: 18px;
+    display: grid;
+    gap: 10px;
+}
+
+.summary-card h3,
+.summary-card p {
+    margin: 0;
+}
+
+.summary-model {
+    color: var(--soil);
+    font-weight: 700;
+}
+
+.summary-metrics {
+    color: rgba(24, 34, 24, 0.72);
+}
+
 .history-signin-card {
     display: grid;
     gap: 14px;
@@ -771,6 +837,17 @@ fieldset {
     .panel-header > div,
     .result-header > div:first-child {
         flex: 1 1 0;
+    }
+
+    .history-actions,
+    .analysis-actions {
+        grid-template-columns: repeat(3, max-content);
+        align-items: center;
+        width: auto;
+    }
+
+    .summary-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 }
 
@@ -916,7 +993,8 @@ fieldset {
     .primary-button,
     .nav-link,
     .brand-pill,
-    .recommendation-chip {
+    .recommendation-chip,
+    .secondary-button {
         width: 100%;
         justify-content: center;
     }
