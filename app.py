@@ -12,6 +12,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import wraps
+from html.parser import HTMLParser
 from io import BytesIO, StringIO
 from pathlib import Path
 from typing import Any
@@ -959,16 +960,68 @@ def records_for_json(dataframe: pd.DataFrame) -> list[dict[str, Any]]:
     return cleaned.to_dict(orient="records")
 
 
+class TableParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.headers: list[str] = []
+        self.rows: list[list[str]] = []
+        self._current_row: list[tuple[str, str]] = []
+        self._cell_parts: list[str] = []
+        self._cell_tag: str | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "tr":
+            self._current_row = []
+        elif tag in {"th", "td"}:
+            self._cell_tag = tag
+            self._cell_parts = []
+
+    def handle_data(self, data: str) -> None:
+        if self._cell_tag:
+            self._cell_parts.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"th", "td"} and self._cell_tag == tag:
+            text = " ".join(part.strip() for part in self._cell_parts if part.strip())
+            self._current_row.append((tag, text))
+            self._cell_parts = []
+            self._cell_tag = None
+        elif tag == "tr" and self._current_row:
+            cell_tags = [cell_tag for cell_tag, _ in self._current_row]
+            values = [value for _, value in self._current_row]
+            if not self.headers and all(cell_tag == "th" for cell_tag in cell_tags):
+                self.headers = values
+            else:
+                self.rows.append(values)
+            self._current_row = []
+
+
+def coerce_export_value(value: str) -> Any:
+    if value == "":
+        return None
+    try:
+        numeric_value = float(value)
+    except ValueError:
+        return value
+    return int(numeric_value) if numeric_value.is_integer() else numeric_value
+
+
 def parse_table_rows(table_html: str | None) -> list[dict[str, Any]]:
     if not table_html:
         return []
-    try:
-        tables = pd.read_html(StringIO(table_html))
-    except ValueError:
+
+    parser = TableParser()
+    parser.feed(table_html)
+    if not parser.headers or not parser.rows:
         return []
-    if not tables:
-        return []
-    return records_for_json(tables[0])
+
+    return [
+        {
+            header: coerce_export_value(value)
+            for header, value in zip(parser.headers, row)
+        }
+        for row in parser.rows
+    ]
 
 
 def build_result_overview(results: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -981,7 +1034,18 @@ def build_result_overview(results: list[dict[str, Any]]) -> dict[str, Any] | Non
 
     for result in results:
         best_model = result.get("best_model", "Model")
-        best_metrics = result.get("best_metrics", {})
+        best_metrics = result.get("best_metrics") or {}
+        if not best_metrics:
+            metric_rows = result.get("metrics_rows") or parse_table_rows(result.get("metrics_table"))
+            matched_row = next((row for row in metric_rows if row.get("Model") == best_model), metric_rows[0] if metric_rows else {})
+            best_metrics = {
+                "MAE": matched_row.get("MAE"),
+                "RMSE": matched_row.get("RMSE"),
+                "R2": matched_row.get("R2"),
+                "CV MAE": matched_row.get("CV MAE"),
+                "CV RMSE": matched_row.get("CV RMSE"),
+                "CV R2": matched_row.get("CV R2"),
+            }
         model_counts[best_model] += 1
         if best_metrics.get("R2") is not None:
             r2_values.append(float(best_metrics["R2"]))
